@@ -56,7 +56,11 @@ The token prompt is deliberately a plain readline **before** the TUI starts, bec
 bubbletea-ruby 0.1.4's input reader returns one key per poll and discards the rest of the
 buffered bytes: a pasted 200-character JWT arrives as a single character. Typing is unaffected
 at any speed, so every other answer is safe inside the TUI — but **type** the zone and weight
-ranges rather than pasting them. `spike/burst_probe.rb` reproduces the underlying bug.
+ranges rather than pasting them.
+
+To reproduce the underlying bug: run a bare Bubbletea model that logs every `KeyMessage`, then
+write 36 bytes to its pty in one call. One message arrives, carrying one rune; the other 35
+bytes are discarded.
 
 For a bare `rate-card` command:
 
