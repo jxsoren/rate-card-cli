@@ -94,8 +94,8 @@ Two distinct no-output cases, which the tool does not conflate:
 bundle exec rspec
 ```
 
-165 examples. **No test contacts production** — `Client` is the only network seam and specs
-stub it via Faraday's test adapter.
+**No test contacts production** — `Client` is the only network seam, and specs stub it via
+Faraday's test adapter.
 
 ## Design
 
