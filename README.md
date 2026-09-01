@@ -65,14 +65,14 @@ No flags needed — the wizard asks for everything:
 
 1. **eHub API token** — pasted, masked. Decoded so you can confirm the account before the run
    starts. Never written to disk. A malformed token re-prompts rather than ending the run.
-2. **Carrier**, then **services** — the list comes from the customer's own service catalogue
-   (`GET /api/v2/services?category=shipping`), so it is exactly what that customer has enabled,
-   including services that would not quote at a single probe weight.
-3. **Rate by** — Weight or Cubic dimensions. Only asked when the token has USPS
+2. **Rate by** — Weight or Cubic dimensions. Only asked when the token has USPS
    services, since USPS cubic pricing (Ground Advantage Cubic, Priority Mail Cubic) is
    priced by which of ten official volume tiers the package falls into, not by weight.
    Choosing Cubic restricts the carrier to USPS and replaces the weight-unit and
    weight-range questions with a multi-select of the ten tiers.
+3. **Carrier**, then **services** — the list comes from the customer's own service catalogue
+   (`GET /api/v2/services?category=shipping`), so it is exactly what that customer has enabled,
+   including services that would not quote at a single probe weight.
 4. **Zones** (`1-8`, or `1,3,5`); then, in weight mode, **weight unit** (`oz`/`lbs`) and
    **weight range** — or, in cubic mode, the **cubic tiers** to include; then
    **package type**, **rate columns** (shipper rate, meter rate).
