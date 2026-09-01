@@ -5,6 +5,14 @@ module RateCard
     # Hand-verified destination addresses, one per zone per carrier. Zone
     # membership is a property of a real address and a real carrier's zone chart,
     # so these are curated by hand and never derived at runtime.
+    #
+    # Ported from ../rate_table_builder/constants/address_constants.rb.
+    #
+    # One deliberate normalisation: that file spells 130 Braewick Rd / 84103 as
+    # 'SLC' in its USPS table and 'Salt Lake City' in its UPS table. We use
+    # 'Salt Lake City' in both. Zone membership follows the postal code, and we
+    # send validation_level 'basic', which some address validators fail on the
+    # abbreviation. Do not "restore" 'SLC'.
     module Addresses
       ORIGIN = {
         company: 'Rate Card Builder',
