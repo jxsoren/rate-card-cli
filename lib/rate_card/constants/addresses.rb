@@ -5,8 +5,6 @@ module RateCard
     # Hand-verified destination addresses, one per zone per carrier. Zone
     # membership is a property of a real address and a real carrier's zone chart,
     # so these are curated by hand and never derived at runtime.
-    #
-    # Ported from ../rate_table_builder/constants/address_constants.rb.
     module Addresses
       ORIGIN = {
         company: 'Rate Card Builder',
