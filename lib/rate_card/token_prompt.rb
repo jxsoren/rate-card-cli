@@ -25,7 +25,14 @@ module RateCard
         return nil if raw.nil?
 
         raw = raw.strip
-        next if raw.empty?
+        # Never a silent `next`: that reprinted the prompt with no explanation,
+        # and a pasted token whose clipboard content carries a leading newline
+        # then reads as a doubled prompt or a hang. Not phrased as a bad token —
+        # the user has not pasted one yet.
+        if raw.empty?
+          ui.error('no token on that line — paste the token')
+          next
+        end
 
         begin
           Token.decode(raw)

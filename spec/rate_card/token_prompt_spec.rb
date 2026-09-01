@@ -36,10 +36,20 @@ RSpec.describe RateCard::TokenPrompt do
     expect(out.string).to include('paste the token again')
   end
 
-  it 'skips a blank line rather than treating it as an answer' do
+  # A silent `next` here reprinted the prompt with no explanation, so a leading
+  # newline in the pasted clipboard content read as a double prompt or a hang.
+  it 'says why it is asking again when the line was blank' do
     io = StringIO.new("\n#{token}\n")
 
     expect(described_class.read(ui: ui, io: io)).to eq(token)
+    expect(out.string).to include('no token on that line')
+  end
+
+  # The blank line is not a malformed token, and saying so would send the user
+  # looking for a problem with a token they had not pasted yet.
+  it 'does not call a blank line a malformed token' do
+    described_class.read(ui: ui, io: StringIO.new("\n#{token}\n"))
+
     expect(out.string).not_to include('paste the token again')
   end
 
