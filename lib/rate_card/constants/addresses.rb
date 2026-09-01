@@ -57,7 +57,15 @@ module RateCard
         8 => { address1: '1 Beacon Street', city: 'Boston', state: 'MA', postal_code: '02108', country: 'US' }
       }.freeze
 
-      BY_CARRIER = { 'USPS' => USPS, 'UPS' => UPS, 'FedEx' => FEDEX }.freeze
+      # DHL eCommerce's zone calculator (ehub's
+      # app/services/carriers/dhl_ecommerce/zone_calculator.rb) is an
+      # unmodified subclass of USPS's zone calculator, so DHL eCommerce
+      # zones are USPS zones. This is the same chart, not a coincidence to
+      # keep in sync by hand - if DHL eCommerce ever gets its own zone
+      # calculator, split this back into its own hand-verified hash.
+      DHL_ECOMMERCE = USPS
+
+      BY_CARRIER = { 'USPS' => USPS, 'UPS' => UPS, 'FedEx' => FEDEX, 'DHL' => DHL_ECOMMERCE }.freeze
 
       module_function
 
