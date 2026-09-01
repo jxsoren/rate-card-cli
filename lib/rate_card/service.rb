@@ -8,12 +8,24 @@ module RateCard
       "#{name} (#{id})"
     end
 
-    # Basis for output filenames; must be filesystem-safe.
+    # Basis for output filenames; must be filesystem-safe and never empty.
+    #
+    # Falls through on the SANITISED value, not the raw one: a code like '###'
+    # is non-empty but sanitises to nothing, and an empty slug would produce a
+    # file named '_shipper_rate.csv' on the user's disk.
     def file_slug
-      base = code.to_s.strip
-      base = name.to_s.strip if base.empty?
-      base = "service_#{id}" if base.empty?
-      base.gsub(/[^A-Za-z0-9]+/, '_').gsub(/\A_+|_+\z/, '')
+      [code, name].each do |candidate|
+        slug = sanitize(candidate)
+        return slug unless slug.empty?
+      end
+
+      sanitize("service_#{id}")
+    end
+
+    private
+
+    def sanitize(value)
+      value.to_s.gsub(/[^A-Za-z0-9]+/, '_').gsub(/\A_+|_+\z/, '')
     end
   end
 end
