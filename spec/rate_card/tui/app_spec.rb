@@ -288,12 +288,36 @@ RSpec.describe RateCard::TUI::App do
       expect(model.error).to be_a(RateCard::NoServices)
     end
 
-    # The DHL regression: the wizard offered a carrier it had no zone chart for,
-    # and Addresses.for_carrier quietly answered with USPS addresses.
+    # A carrier without a zone chart should never reach the wizard menu:
+    # Addresses.for_carrier has nothing to answer with for it.
     it 'drops services whose carrier has no zone chart from the menu' do
       body = { 'services' => [
         { 'service_id' => 1172, 'service_code' => 'GroundAdvantage',
           'service' => 'USPS Ground Advantage', 'carrier_code' => 'usps' },
+        { 'service_id' => 900, 'service_code' => 'AmazonGround',
+          'service' => 'Amazon Ground', 'carrier_code' => 'amazon' }
+      ] }
+
+      model = start(client: FakeClient.new(services: body))
+
+      expect(model.error).to be_nil
+      expect(model.view).not_to include('Amazon')
+    end
+
+    it 'reports UnsupportedCarrier when every service is on a chartless carrier' do
+      body = { 'services' => [
+        { 'service_id' => 900, 'service_code' => 'AmazonGround',
+          'service' => 'Amazon Ground', 'carrier_code' => 'amazon' }
+      ] }
+
+      model = start(client: FakeClient.new(services: body))
+
+      expect(model.error).to be_a(RateCard::UnsupportedCarrier)
+      expect(model.error.message).to include('Amazon')
+    end
+
+    it 'keeps services whose carrier now has a zone chart, such as DHL eCommerce' do
+      body = { 'services' => [
         { 'service_id' => 900, 'service_code' => 'DHL_BPM',
           'service' => 'DHL Ecommerce BPM Ground', 'carrier_code' => 'dhl_ecommerce' }
       ] }
@@ -301,19 +325,7 @@ RSpec.describe RateCard::TUI::App do
       model = start(client: FakeClient.new(services: body))
 
       expect(model.error).to be_nil
-      expect(model.view).not_to include('DHL')
-    end
-
-    it 'reports UnsupportedCarrier when every service is on a chartless carrier' do
-      body = { 'services' => [
-        { 'service_id' => 900, 'service_code' => 'DHL_BPM',
-          'service' => 'DHL Ecommerce BPM Ground', 'carrier_code' => 'dhl_ecommerce' }
-      ] }
-
-      model = start(client: FakeClient.new(services: body))
-
-      expect(model.error).to be_a(RateCard::UnsupportedCarrier)
-      expect(model.error.message).to include('DHL')
+      expect(model.view).to include('DHL')
     end
 
     it 'carries Unauthorized out of the loop rather than raising through it' do
