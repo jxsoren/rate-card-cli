@@ -13,17 +13,21 @@ module RateCard
       # listed here keeps its own code, upcased: an unrecognised carrier is
       # still better named by itself than lumped into 'Other'.
       #
-      # DHL reaches /services as 'dhl_ecommerce', not 'dhl'; both collapse to
-      # 'DHL' here so they share Addresses::DHL_ECOMMERCE, which is aliased to
-      # Addresses::USPS because DHL eCommerce's zone calculator in the Rails
-      # monolith is a verified unmodified subclass of USPS's zone calculator.
-      # Do not add another DHL code (dhl_express and friends) to this 'DHL'
-      # key unless its zones are likewise verified identical to USPS's —
-      # otherwise it needs its own distinct display name here AND its own
-      # chart in Addresses, or it will silently inherit the wrong zone chart.
+      # DHL eCommerce reaches /services as 'dhl_ecommerce' and maps to 'DHL'
+      # here, aliased to Addresses::USPS because DHL eCommerce's zone
+      # calculator in the Rails monolith is a verified unmodified subclass of
+      # USPS's zone calculator. The bare 'dhl' code is DHL Express, a distinct
+      # carrier with unverified zones, so it gets its own display name
+      # ('DHL Express') rather than sharing 'DHL' — with no chart of its own
+      # in Addresses, it correctly raises UnsupportedCarrier instead of
+      # silently inheriting USPS's zones.
+      # Do not add another DHL code to the 'DHL' key unless its zones are
+      # likewise verified identical to USPS's — otherwise it needs its own
+      # distinct display name here AND its own chart in Addresses, or it will
+      # silently inherit the wrong zone chart.
       CARRIER_CODES = {
         'usps' => 'USPS', 'ups' => 'UPS', 'fedex' => 'FedEx',
-        'dhl' => 'DHL', 'dhl_ecommerce' => 'DHL', 'amazon' => 'Amazon'
+        'dhl' => 'DHL Express', 'dhl_ecommerce' => 'DHL', 'amazon' => 'Amazon'
       }.freeze
 
       module_function

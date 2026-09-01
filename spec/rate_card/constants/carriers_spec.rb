@@ -12,10 +12,16 @@ RSpec.describe RateCard::Constants::Carriers do
     end
 
     # 'dhl_ecommerce' used to upcase to 'DHL_ECOMMERCE', which matched no zone
-    # chart and fell back to USPS addresses.
-    it 'maps every known DHL code to the same display carrier' do
+    # chart and fell back to USPS addresses — accidentally right, for the
+    # wrong reason. It's now deliberately aliased to USPS via 'DHL' below.
+    it 'maps dhl_ecommerce to the DHL display carrier' do
       expect(described_class.for_carrier_code('dhl_ecommerce')).to eq('DHL')
-      expect(described_class.for_carrier_code('dhl')).to eq('DHL')
+    end
+
+    # Bare 'dhl' is DHL Express, a distinct carrier with unverified zones —
+    # it must not share the 'DHL' key (and its USPS alias) with dhl_ecommerce.
+    it 'maps bare dhl to a distinct display carrier' do
+      expect(described_class.for_carrier_code('dhl')).to eq('DHL Express')
     end
 
     it 'names an unrecognised carrier by its own code rather than Other' do
