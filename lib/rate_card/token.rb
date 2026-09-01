@@ -42,9 +42,9 @@ module RateCard
       segments = raw.to_s.split('.')
       raise DecodeError, 'token is not a JWT (expected three segments)' unless segments.length == 3
 
-      encoded = segments[1]
-      padded = encoded + ('=' * (-encoded.length % 4))
-      parsed = JSON.parse(Base64.urlsafe_decode64(padded))
+      # urlsafe_decode64 restores missing '=' padding itself, which matters
+      # because real JWT segments are always unpadded.
+      parsed = JSON.parse(Base64.urlsafe_decode64(segments[1]))
       raise DecodeError, 'token payload is not a JSON object' unless parsed.is_a?(Hash)
 
       parsed

@@ -42,6 +42,23 @@ RSpec.describe RateCard::Token do
         .to eq(name: 'customer 1042', customer_id: 1042, email: nil)
     end
 
+    # Real JWT segments are unpadded base64url. These two cover both non-zero
+    # padding residues (2 missing '=' chars, then 1), so the decoder keeps
+    # working on unpadded input no matter the payload length.
+    it 'decodes an unpadded payload two characters short of a base64 block' do
+      token = jwt_for({ data: { user: { customer_id: 7, email: 'ab@b.test' } } })
+
+      expect(described_class.decode(token)).to eq(name: 'ab@b.test', customer_id: 7,
+                                                  email: 'ab@b.test')
+    end
+
+    it 'decodes an unpadded payload one character short of a base64 block' do
+      token = jwt_for({ data: { user: { customer_id: 7, email: 'abc@b.test' } } })
+
+      expect(described_class.decode(token)).to eq(name: 'abc@b.test', customer_id: 7,
+                                                  email: 'abc@b.test')
+    end
+
     it 'raises DecodeError, not TypeError, when the payload is a JSON array' do
       token = "header.#{Base64.urlsafe_encode64(JSON.generate([1, 2, 3]), padding: false)}.sig"
 
