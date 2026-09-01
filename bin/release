@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Release rate-card: build the gem, push it to RubyGems, then update the
+# Homebrew formula to match.
+#
+# The version comes from lib/rate_card/version.rb -- bump that first, commit it,
+# then run this. The formula's sha256 must be the checksum of the exact .gem file
+# that was pushed, which is why the two steps live in one script.
+#
+# Usage: bin/release [path-to-tap-checkout]
+#   Defaults to the tap Homebrew already has cloned, if any.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+VERSION=$(ruby -r ./lib/rate_card/version -e 'print RateCard::VERSION')
+GEM="rate-card-${VERSION}.gem"
+TAP=${1:-"$(brew --repository 2>/dev/null)/Library/Taps/ehub/homebrew-tools"}
+
+if gem list --remote --exact rate-card | grep -q "(\(.*[( ]\)\?${VERSION}"; then
+  echo "rate-card ${VERSION} is already on RubyGems. Bump lib/rate_card/version.rb first." >&2
+  exit 1
+fi
+
+echo "==> Testing"
+bundle exec rspec
+
+echo "==> Building ${GEM}"
+rm -f "$GEM"
+gem build rate-card.gemspec
+
+echo "==> Pushing to RubyGems (expect an MFA prompt)"
+gem push "$GEM"
+
+SHA=$(shasum -a 256 "$GEM" | cut -d' ' -f1)
+echo "==> Gem ${VERSION} sha256 ${SHA}"
+
+if [ ! -d "$TAP/Formula" ]; then
+  echo "No tap checkout at ${TAP}; skipping the formula update." >&2
+  echo "Update url/sha256 in packaging/homebrew/rate-card.rb by hand and copy it across." >&2
+  exit 0
+fi
+
+echo "==> Updating the formula"
+sed -i '' \
+  -e "s|url \".*\"|url \"https://rubygems.org/downloads/${GEM}\"|" \
+  -e "s|sha256 \".*\"|sha256 \"${SHA}\"|" \
+  packaging/homebrew/rate-card.rb
+
+cp packaging/homebrew/rate-card.rb "$TAP/Formula/rate-card.rb"
+
+cat <<MSG
+
+Done. rate-card ${VERSION} is on RubyGems and the formula is updated.
+
+Still to do by hand:
+  1. Commit packaging/homebrew/rate-card.rb here.
+  2. In ${TAP}: commit and push Formula/rate-card.rb.
+  3. Verify: brew uninstall rate-card && brew install ehub/tools/rate-card
+MSG

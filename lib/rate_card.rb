@@ -17,10 +17,14 @@ module RateCard
 
   # The destination directory cannot be written to.
   class OutputNotWritable < Error; end
+
+  # A carrier was asked for that has no hand-curated zone chart. Raised rather
+  # than defaulted: a zone number only means something against a real carrier's
+  # own chart, so substituting another carrier's addresses would produce a card
+  # that looks right and is mislabeled.
+  class UnsupportedCarrier < Error; end
 end
 
-# The files below do not exist yet — each lands in its own later task.
-# Uncomment each line as its task is implemented.
 require_relative 'rate_card/token'
 require_relative 'rate_card/token_prompt'
 require_relative 'rate_card/service'

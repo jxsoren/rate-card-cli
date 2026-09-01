@@ -5,16 +5,55 @@ Interactive CLI that generates a shipping rate card — a weight × zone grid of
 
 ## Install
 
+Homebrew — nothing else needed, and no Ruby setup of your own:
+
 ```bash
-bundle install
+brew install jxsoren/tools/rate-card
+rate-card
 ```
 
-Ruby 3.3.4 (pinned in `.ruby-version`).
+> The tap repo (`jxsoren/homebrew-tools`) does not exist yet, so this command does not
+> work until it is created — see **Release** below. The gem install underneath it does.
+
+Homebrew installs its own Ruby and keeps every gem inside the keg, so this cannot
+collide with an rbenv or system Ruby you already have.
+
+If you already work in Ruby, the gem is equivalent:
+
+```bash
+gem install rate-card
+```
+
+To upgrade: `brew upgrade rate-card`, or `gem update rate-card`.
+
+## Develop
+
+```bash
+bundle install
+bundle exec exe/rate-card
+bundle exec rspec
+```
+
+Ruby 3.3.4 (pinned in `.ruby-version`); the gemspec floor is 3.2, and Homebrew currently
+builds against Ruby 4.0.
 
 The TUI is [bubbletea-ruby](https://github.com/marcoroth/bubbletea-ruby) with `bubbles` and
 `lipgloss`. These ship precompiled native binaries, so no Go toolchain is needed to install
 them. Note that `bubbles` is a shared gem name — `0.0.x` is an unrelated gem that pulls in
-`aws-sdk` — which is why the Gemfile pins `~> 0.1`.
+`aws-sdk` — which is why the gemspec pins `~> 0.1`.
+
+## Release
+
+Bump `lib/rate_card/version.rb`, commit, then:
+
+```bash
+bin/release
+```
+
+That runs the specs, builds and pushes the gem, and rewrites the formula's `url` and
+`sha256` to match what was pushed. The tap commit is left to you — see the script's
+closing output. `packaging/homebrew/rate-card.rb` is the source of truth for the formula;
+the tap's `Formula/rate-card.rb` is a copy.
 
 ## Use
 
