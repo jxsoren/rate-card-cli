@@ -13,12 +13,14 @@ module RateCard
       # listed here keeps its own code, upcased: an unrecognised carrier is
       # still better named by itself than lumped into 'Other'.
       #
-      # DHL reaches /services as 'dhl_ecommerce', not 'dhl'. Left unmapped it
-      # upcased to 'DHL_ECOMMERCE', which matched neither DISPLAY_ORDER nor
-      # Addresses::BY_CARRIER — so the wizard silently rated DHL against the
-      # USPS zone chart. Any further DHL code (dhl_express and friends) needs
-      # its own entry here AND its own chart in Addresses before it can be
-      # offered; do not assume one DHL zone chart serves all of them.
+      # DHL reaches /services as 'dhl_ecommerce', not 'dhl'; both collapse to
+      # 'DHL' here so they share Addresses::DHL_ECOMMERCE, which is aliased to
+      # Addresses::USPS because DHL eCommerce's zone calculator in the Rails
+      # monolith is a verified unmodified subclass of USPS's zone calculator.
+      # Do not add another DHL code (dhl_express and friends) to this 'DHL'
+      # key unless its zones are likewise verified identical to USPS's —
+      # otherwise it needs its own distinct display name here AND its own
+      # chart in Addresses, or it will silently inherit the wrong zone chart.
       CARRIER_CODES = {
         'usps' => 'USPS', 'ups' => 'UPS', 'fedex' => 'FedEx',
         'dhl' => 'DHL', 'dhl_ecommerce' => 'DHL', 'amazon' => 'Amazon'
