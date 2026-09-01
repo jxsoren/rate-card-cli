@@ -127,8 +127,8 @@ Both to your terminal and to disk:
 ┌────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
 │ wt(oz) │   Z1 │   Z2 │   Z3 │   Z4 │   Z5 │   Z6 │   Z7 │   Z8 │
 ├────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
-│      1 │ 3.25 │ 3.50 │ 3.75 │ 4.00 │ 4.25 │ 4.50 │ 4.75 │ 5.00 │
-│      2 │ 4.75 │ 5.00 │ 5.25 │ 5.50 │    — │ 6.00 │ 6.25 │ 6.50 │
+│      1 │ 1.11 │ 2.22 │ 3.33 │ 4.44 │ 5.55 │ 6.66 │ 7.77 │ 8.88 │
+│      2 │ 2.11 │ 3.22 │ 4.33 │ 5.44 │    — │ 7.66 │ 8.77 │ 9.88 │
 └────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
 
   ⚠ 1 cell failed
@@ -138,6 +138,8 @@ Both to your terminal and to disk:
       GroundAdvantage_shipper_rate.csv
       GroundAdvantage_meter_rate.csv
 ```
+
+The rates above are invented placeholders, not a real quote.
 
 One CSV per service per rate column. Header is `weight` plus one column per zone. The run
 directory is timestamped, so a new card never clobbers an old one.

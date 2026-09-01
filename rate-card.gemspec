@@ -6,7 +6,6 @@ Gem::Specification.new do |spec|
   spec.name = 'rate-card'
   spec.version = RateCard::VERSION
   spec.authors = ['eHub']
-  spec.email = ['ops@acme.test']
 
   spec.summary = 'Interactive CLI that builds a shipping rate card from the eHub API.'
   spec.description = <<~TEXT
