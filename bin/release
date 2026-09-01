@@ -14,7 +14,7 @@ cd "$(dirname "$0")/.."
 
 VERSION=$(ruby -r ./lib/rate_card/version -e 'print RateCard::VERSION')
 GEM="rate-card-${VERSION}.gem"
-TAP=${1:-"$(brew --repository 2>/dev/null)/Library/Taps/ehub/homebrew-tools"}
+TAP=${1:-"$(brew --repository 2>/dev/null)/Library/Taps/jxsoren/homebrew-tools"}
 
 if gem list --remote --exact rate-card | grep -q "(\(.*[( ]\)\?${VERSION}"; then
   echo "rate-card ${VERSION} is already on RubyGems. Bump lib/rate_card/version.rb first." >&2
@@ -55,5 +55,5 @@ Done. rate-card ${VERSION} is on RubyGems and the formula is updated.
 Still to do by hand:
   1. Commit packaging/homebrew/rate-card.rb here.
   2. In ${TAP}: commit and push Formula/rate-card.rb.
-  3. Verify: brew uninstall rate-card && brew install ehub/tools/rate-card
+  3. Verify: brew uninstall rate-card && brew install jxsoren/tools/rate-card
 MSG
