@@ -132,6 +132,42 @@ RSpec.describe RateCard::Wizard do
     expect { wiz.run }.to raise_error(RateCard::Unauthorized)
   end
 
+  # The three re-prompt loops. Each exists so one fat-fingered answer does not
+  # cost the user the whole run, and none of them was covered by the plan's spec.
+  it 're-prompts instead of raising when the pasted token is malformed' do
+    prompt.input << "not-a-jwt\n"        # rejected, should re-prompt
+    prompt.input << "#{token}\n"
+    prompt.input << "\n" << " \n" << "\n" << "\n" << "\n" << "\n" << "\n"
+    prompt.input << "y\n"
+    prompt.input.rewind
+
+    spec = wizard.run
+
+    expect(spec.customer_id).to eq(1042)
+  end
+
+  it 're-prompts when the zone answer contains no valid zone' do
+    prompt.input << "#{token}\n" << "\n" << " \n"
+    prompt.input << "99\n"               # no such zone, should re-prompt
+    prompt.input << "1-3\n"
+    prompt.input << "\n" << "\n" << "\n" << "\n"
+    prompt.input << "y\n"
+    prompt.input.rewind
+
+    expect(wizard.run.zones).to eq([1, 2, 3])
+  end
+
+  it 're-prompts when the weight answer is unparseable' do
+    prompt.input << "#{token}\n" << "\n" << " \n" << "\n" << "\n"
+    prompt.input << "abc\n"              # unparseable, should re-prompt
+    prompt.input << "1-2\n"
+    prompt.input << "\n" << "\n"
+    prompt.input << "y\n"
+    prompt.input.rewind
+
+    expect(wizard.run.weights).to eq([1, 2])
+  end
+
   describe '.parse_range' do
     it 'parses a dashed range' do
       expect(described_class.parse_range('1-8')).to eq((1..8).to_a)
