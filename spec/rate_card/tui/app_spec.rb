@@ -476,6 +476,17 @@ RSpec.describe RateCard::TUI::App do
       expect { spec.validate! }.not_to raise_error
     end
 
+    it 'labels the transcript line "cubic tiers", not "weights"' do
+      model = start
+      press(model, Keys.down, Keys.enter)  # rate by: cubic dimensions
+      press(model, Keys.space, Keys.enter) # services
+      press(model, Keys.enter)             # zones
+      press(model, Keys.enter)             # cubic tiers: all pre-ticked
+
+      expect(model.view).to include('cubic tiers:')
+      expect(model.view).not_to include('weights:')
+    end
+
     it 'skips the rate-by question entirely when the token has no USPS services' do
       body = { 'services' => [{ 'service_id' => 392, 'service_code' => 'FEDEX_GROUND',
                                 'service' => 'FedEx Ground', 'carrier_code' => 'fedex' }] }

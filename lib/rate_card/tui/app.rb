@@ -501,6 +501,7 @@ module RateCard
         label = { rate_mode: 'rate by', carrier: 'carrier', services: 'services', zones: 'zones',
                   unit: 'unit', weights: 'weights', package_type: 'package',
                   rate_keys: 'columns' }[stage]
+        label = 'cubic tiers' if stage == :weights && @answers[:rate_mode] == :cubic
         return nil if label.nil?
 
         "  #{Theme.ok(Theme::TICK)} #{label}: #{Theme.bold(describe(stage, value))}"
