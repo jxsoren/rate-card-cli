@@ -5,3 +5,6 @@ vendor/bundle
 *.gem
 .DS_Store
 .idea/
+
+# Internal planning and spec artifacts. Kept locally, not shipped.
+docs/
