@@ -28,12 +28,12 @@ module RateCard
     end
 
     def rows(service, rate_key)
-      spec.weights.map do |weight|
+      spec.rows.map do |row|
         cells = spec.zones.map do |zone|
           format_rate(grid.value(service_id: service.id, rate_key: rate_key,
-                                 weight: weight, zone: zone))
+                                 weight: row, zone: zone))
         end
-        [weight.to_s, *cells]
+        [spec.row_label(row), *cells]
       end
     end
 

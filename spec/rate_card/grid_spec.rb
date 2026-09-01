@@ -173,6 +173,24 @@ RSpec.describe RateCard::Grid do
     expect(ticks).to eq(4)
   end
 
+  it 'sweeps cubic tiers instead of weights when the spec is in cubic mode' do
+    spec = RateCard::RunSpec.new(
+      token: 'tok', customer_name: 'Acme', customer_id: 1, carrier: 'USPS',
+      services: [ground], zones: [1], weight_unit: :oz, weights: [],
+      rate_mode: :cubic, cubic_tiers: [8, 9],
+      package_type: 'parcel', rate_keys: [:shipper_rate],
+      output_base: Pathname.new('/tmp'), show_table: true, started_at: Time.now
+    )
+    client = FakeClient.new(&both_services_responder)
+
+    grid = described_class.build(spec: spec, client: client)
+
+    # Tier 8 caps at 128oz, tier 9 at 240oz — both_services_responder prices
+    # off the wire weight, so distinct tiers must produce distinct rates.
+    expect(grid.value(service_id: 1172, rate_key: :shipper_rate, weight: 8, zone: 1)).to eq(128.0)
+    expect(grid.value(service_id: 1172, rate_key: :shipper_rate, weight: 9, zone: 1)).to eq(240.0)
+  end
+
   it 'sorts failures by weight then zone for a readable report' do
     client = FakeClient.new { |_w, _p| RateCard::RequestFailed.new('down') }
 

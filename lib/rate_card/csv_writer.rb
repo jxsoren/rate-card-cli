@@ -40,19 +40,19 @@ module RateCard
       path = spec.run_dir.join("#{service.file_slug}_#{rate_key}.csv")
 
       CSV.open(path, 'w') do |csv|
-        csv << ['weight', *spec.zones]
-        spec.weights.each { |weight| csv << row_for(service, rate_key, weight) }
+        csv << [spec.row_header, *spec.zones]
+        spec.rows.each { |row| csv << row_for(service, rate_key, row) }
       end
 
       path
     end
 
-    def row_for(service, rate_key, weight)
+    def row_for(service, rate_key, row)
       cells = spec.zones.map do |zone|
-        grid.value(service_id: service.id, rate_key: rate_key, weight: weight, zone: zone)
+        grid.value(service_id: service.id, rate_key: rate_key, weight: row, zone: zone)
       end
 
-      [weight, *cells]
+      [spec.row_label(row), *cells]
     end
   end
 end

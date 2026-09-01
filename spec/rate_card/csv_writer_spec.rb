@@ -98,6 +98,25 @@ RSpec.describe RateCard::CsvWriter do
     expect(paths.first.basename.to_s).to eq('UPS_2nd_Day_Air_shipper_rate.csv')
   end
 
+  it 'heads the row column cubic_tier and labels rows by tier name in cubic mode' do
+    spec = RateCard::RunSpec.new(
+      token: 'tok', customer_name: 'Acme', customer_id: 1042, carrier: 'USPS',
+      services: [ground], zones: [1], weight_unit: :oz, weights: [],
+      rate_mode: :cubic, cubic_tiers: [1, 2], package_type: 'parcel',
+      rate_keys: [:shipper_rate], output_base: Pathname.new(@dir), show_table: true,
+      started_at: Time.utc(2026, 8, 31, 15, 4, 22)
+    )
+    grid = RateCard::Grid.new(spec)
+    cells = grid.instance_variable_get(:@cells)
+    cells[[1172, :shipper_rate, 1, 1]] = 4.2
+    cells[[1172, :shipper_rate, 2, 1]] = 5.4
+
+    paths = described_class.new(grid: grid, spec: spec).write
+    content = File.read(paths.first)
+
+    expect(content).to eq("cubic_tier,1\nTier 1,4.2\nTier 2,5.4\n")
+  end
+
   describe '.ensure_writable!' do
     it 'passes for a writable base directory' do
       expect { described_class.ensure_writable!(Pathname.new(@dir)) }.not_to raise_error

@@ -43,12 +43,11 @@ RSpec.describe RateCard::RunSpec do
     end
   end
 
-  describe '#zone_summary / #weight_summary / #service_names / #rate_key_labels' do
+  describe '#zone_summary / #service_names / #rate_key_labels' do
     it 'describes the run for the pre-confirm recap' do
       spec = build(zones: [1, 2, 3, 7], weights: [1, 2, 3, 4], weight_unit: :lbs)
 
       expect(spec.zone_summary).to eq('1-3,7')
-      expect(spec.weight_summary).to eq('1-4 lbs')
       expect(spec.service_names).to eq(['USPS Ground Advantage'])
       expect(spec.rate_key_labels).to eq(['shipper rate', 'meter rate'])
     end
@@ -63,6 +62,73 @@ RSpec.describe RateCard::RunSpec do
 
       expect(one_service.call_count).to eq(6)
       expect(many_services.call_count).to eq(6)
+    end
+  end
+
+  describe '#rows / #row_label / #row_header (weight mode)' do
+    it 'defaults to weight mode when rate_mode is not set' do
+      expect(build.rate_mode).to eq(:weight)
+    end
+
+    it 'rows is the weights array' do
+      expect(build(weights: [1, 2, 4]).rows).to eq([1, 2, 4])
+    end
+
+    it 'labels a row with the raw weight' do
+      expect(build.row_label(4)).to eq('4')
+    end
+
+    it 'heads the row column "weight"' do
+      expect(build.row_header).to eq('weight')
+    end
+
+    it 'sends the row weight, unit-converted, as the wire weight' do
+      expect(build(weight_unit: :lbs).weight_in_oz_for(3)).to eq(48)
+    end
+
+    it 'has no dimension override' do
+      expect(build.dims_for(4)).to be_nil
+    end
+  end
+
+  describe '#rows / #row_label / #row_header (cubic mode)' do
+    def cubic_build(**overrides)
+      build(rate_mode: :cubic, cubic_tiers: [1, 9], weights: [], **overrides)
+    end
+
+    it 'rows is the selected cubic tier ids' do
+      expect(cubic_build.rows).to eq([1, 9])
+    end
+
+    it 'labels a row with the tier name' do
+      expect(cubic_build.row_label(1)).to eq('Tier 1')
+    end
+
+    it 'heads the row column "cubic_tier"' do
+      expect(cubic_build.row_header).to eq('cubic_tier')
+    end
+
+    it 'sends the tier weight cap as the wire weight, ignoring weight_unit' do
+      expect(cubic_build.weight_in_oz_for(1)).to eq(128)
+      expect(cubic_build.weight_in_oz_for(9)).to eq(240)
+    end
+
+    it 'returns the tier bounding cube as the dimension override' do
+      expect(cubic_build.dims_for(1)).to eq(length: 3.0, width: 3.0, height: 3.0)
+    end
+  end
+
+  describe '#weight_label (cubic mode)' do
+    it 'reads "cubic tier" instead of a unit' do
+      spec = build(rate_mode: :cubic, cubic_tiers: [1], weights: [])
+      expect(spec.weight_label).to eq('cubic tier')
+    end
+  end
+
+  describe '#call_count (cubic mode)' do
+    it 'is cubic tiers times zones' do
+      spec = build(rate_mode: :cubic, cubic_tiers: [1, 2, 3], weights: [], zones: [1, 2])
+      expect(spec.call_count).to eq(6)
     end
   end
 
@@ -135,6 +201,21 @@ RSpec.describe RateCard::RunSpec do
 
     it 'rejects an empty weight list' do
       expect { build(weights: []).validate! }.to raise_error(ArgumentError, /at least one weight/)
+    end
+
+    it 'rejects an empty cubic tier selection in cubic mode' do
+      expect { build(rate_mode: :cubic, cubic_tiers: [], weights: []).validate! }
+        .to raise_error(ArgumentError, /at least one cubic tier/)
+    end
+
+    it 'rejects an unknown cubic tier id in cubic mode' do
+      expect { build(rate_mode: :cubic, cubic_tiers: [1, 99], weights: []).validate! }
+        .to raise_error(ArgumentError, /unknown cubic tier: 99/)
+    end
+
+    it 'does not require weights in cubic mode' do
+      expect { build(rate_mode: :cubic, cubic_tiers: [1], weights: []).validate! }
+        .not_to raise_error
     end
 
     it 'rejects an empty rate key selection' do

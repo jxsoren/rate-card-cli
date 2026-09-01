@@ -61,13 +61,13 @@ module RateCard
       end
     end
 
-    def failure_report(failures)
+    def failure_report(failures, spec:)
       return if failures.empty?
 
       @io.puts
       warn "#{failures.length} #{failures.length == 1 ? 'cell' : 'cells'} failed"
       failures.first(MAX_LISTED_FAILURES).each do |failure|
-        @io.puts "      wt #{failure.weight}  Z#{failure.zone}  → #{failure.message}"
+        @io.puts "      #{row_prefix(spec)}#{spec.row_label(failure.weight)}  Z#{failure.zone}  → #{failure.message}"
       end
       remaining = failures.length - MAX_LISTED_FAILURES
       @io.puts "      … and #{remaining} more" if remaining.positive?
@@ -114,6 +114,13 @@ module RateCard
       noun = paths.length == 1 ? 'file' : 'files'
       success "Saved #{paths.length} #{noun} to #{paths.first.dirname}"
       paths.each { |path| @io.puts "      #{path.basename}" }
+    end
+
+    # "wt " in weight mode, so failure lines read exactly as before; nothing
+    # extra in cubic mode, since row_label is already self-describing
+    # ("Tier 3", not just "3").
+    def row_prefix(spec)
+      spec.rate_mode == :cubic ? '' : 'wt '
     end
   end
 end

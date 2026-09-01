@@ -88,4 +88,32 @@ RSpec.describe RateCard::TableRenderer do
       expect(rows).to eq([['1', '5.85', '6.15'], ['2', '7.00', '—']])
     end
   end
+
+  describe 'cubic mode' do
+    let(:cubic_spec) do
+      RateCard::RunSpec.new(
+        token: 'tok', customer_name: 'Acme Fulfillment', customer_id: 1042, carrier: 'USPS',
+        services: [ground], zones: [1], weight_unit: :oz, weights: [],
+        rate_mode: :cubic, cubic_tiers: [1, 2], package_type: 'parcel',
+        rate_keys: [:shipper_rate], output_base: Pathname.new('/tmp'), show_table: true,
+        started_at: Time.now
+      )
+    end
+
+    let(:cubic_grid) do
+      RateCard::Grid.new(cubic_spec).tap do |g|
+        cells = g.instance_variable_get(:@cells)
+        cells[[1172, :shipper_rate, 1, 1]] = 4.2
+        cells[[1172, :shipper_rate, 2, 1]] = 5.4
+      end
+    end
+
+    it 'heads the row column "cubic tier" and labels rows by tier name' do
+      rendered = described_class.new(grid: cubic_grid, spec: cubic_spec).tables.first[1]
+
+      expect(rendered).to include('cubic tier')
+      expect(rendered).to include('Tier 1')
+      expect(rendered).to include('Tier 2')
+    end
+  end
 end

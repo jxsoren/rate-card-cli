@@ -74,7 +74,7 @@ module RateCard
     end
 
     def cell_coordinates
-      spec.weights.product(spec.zones)
+      spec.rows.product(spec.zones)
     end
 
     def fetch_cell(client, weight, zone)
