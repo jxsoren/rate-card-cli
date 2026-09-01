@@ -24,7 +24,6 @@ module RateCard
       user = payload.dig('data', 'user') || {}
 
       customer_id = user['customer_id']
-      # We don't need to raise an exception upon no customer_id here. 
       raise DecodeError, 'token payload has no customer_id' unless customer_id.is_a?(Integer)
 
       email = presence(user['email'])
