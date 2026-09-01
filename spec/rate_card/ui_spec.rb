@@ -3,33 +3,12 @@
 require 'stringio'
 require 'pathname'
 
+# The banner, the customer echo and the recap moved to TUI::App when the
+# interactive half switched to Bubbletea; their coverage lives in app_spec.
+# What is left here is the plain reporting printed after the loop exits.
 RSpec.describe RateCard::UI do
   let(:io) { StringIO.new }
   subject(:ui) { described_class.new(io: io) }
-
-  describe '#banner' do
-    it 'names the tool and states that the target is production' do
-      ui.banner
-
-      expect(io.string).to include('eHub Rate Card Builder')
-      expect(io.string).to include('production')
-      expect(io.string).to include('api.ehub.com')
-    end
-  end
-
-  describe '#customer_confirmed' do
-    it 'echoes the decoded customer so the user can verify before spending calls' do
-      ui.customer_confirmed(name: 'someone@example.com', customer_id: 1_042)
-
-      expect(io.string).to include('someone@example.com')
-      expect(io.string).to include('1042')
-    end
-
-    it 'ignores an extra email key, so it can be splatted from Token.decode' do
-      expect { ui.customer_confirmed(name: 'a@b.test', customer_id: 1, email: 'a@b.test') }
-        .not_to raise_error
-    end
-  end
 
   describe '#info / #warn / #error / #success' do
     it 'prints each message' do
@@ -39,39 +18,6 @@ RSpec.describe RateCard::UI do
       ui.success('saved')
 
       expect(io.string).to include('probing', 'two cells failed', 'token rejected', 'saved')
-    end
-  end
-
-  describe '#recap' do
-    let(:spec) do
-      instance_double(
-        RateCard::RunSpec,
-        carrier: 'usps',
-        service_names: ['Ground Advantage', 'Priority Mail'],
-        zone_summary: '1-8',
-        weight_summary: '1-16 oz',
-        package_type: 'parcel',
-        rate_key_labels: ['shipper rate', 'meter rate'],
-        call_count: 128
-      )
-    end
-
-    it 'states the call count so the user knows the production cost before confirming' do
-      ui.recap(spec)
-
-      expect(io.string).to include('128')
-      expect(io.string).to include('rate calls')
-    end
-
-    it 'repeats every answer back, so the confirm is not made on a bare number' do
-      ui.recap(spec)
-
-      expect(io.string).to include('usps')
-      expect(io.string).to include('Ground Advantage', 'Priority Mail')
-      expect(io.string).to include('1-8')
-      expect(io.string).to include('1-16 oz')
-      expect(io.string).to include('parcel')
-      expect(io.string).to include('shipper rate', 'meter rate')
     end
   end
 

@@ -1,21 +1,22 @@
 # frozen_string_literal: true
 
 module RateCard
-  # Orchestrates one run: verify the destination, fetch, render, write, report.
-  # Returns the process exit code.
+  # Reports one completed run: render, write, report. Returns the process exit
+  # code.
+  #
+  # The fetch itself moved into TUI::App when this switched to Bubbletea — it
+  # has to happen inside the event loop for the progress bar to be live — so
+  # this now takes the finished Grid rather than building one. Everything here
+  # runs after the terminal is back to normal, which is why it is all plain
+  # printing.
   class Runner
-    def initialize(spec:, client:, ui:)
+    def initialize(spec:, grid:, ui:)
       @spec = spec
-      @client = client
+      @grid = grid
       @ui = ui
     end
 
     def run
-      # Before the first call, so a bad path is not discovered after 128 of them.
-      CsvWriter.ensure_writable!(spec.output_base)
-
-      grid = fetch(spec, client)
-
       @ui.print_tables(TableRenderer.new(grid: grid, spec: spec).tables) if spec.show_table
       @ui.failure_report(grid.failures)
       @ui.warning_report(grid.warnings)
@@ -37,13 +38,6 @@ module RateCard
 
     private
 
-    attr_reader :spec, :client
-
-    def fetch(spec, client)
-      @ui.blank
-      @ui.with_progress(spec.call_count) do |tick|
-        Grid.build(spec: spec, client: client, on_progress: tick)
-      end
-    end
+    attr_reader :spec, :grid
   end
 end

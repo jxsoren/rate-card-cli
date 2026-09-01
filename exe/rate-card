@@ -3,7 +3,6 @@
 
 require 'optparse'
 require 'pathname'
-require 'tty-prompt'
 
 $LOAD_PATH.unshift File.expand_path('../lib', __dir__)
 require 'rate_card'
@@ -47,43 +46,56 @@ rescue OptionParser::ParseError => e
 end
 
 ui = RateCard::UI.new(io: $stdout)
-prompt = TTY::Prompt.new(interrupt: :exit)
+ui.banner
+
+# Read before the TUI starts. bubbletea-ruby 0.1.4 drops all but the first
+# character of a pasted burst, and the token is the one answer that is always
+# pasted; out here the terminal's own line editing handles it. See TokenPrompt.
+token = RateCard::TokenPrompt.read(ui: ui)
+if token.nil?
+  ui.info('Cancelled — nothing was built.')
+  exit 0
+end
+
+# The TUI owns the terminal from here until it quits: the catalogue lookup, the
+# remaining answers and the fetch all happen inside its event loop. Reporting
+# happens after, on a terminal that has been handed back.
+app = RateCard::TUI::App.new(token: token, output_base: options[:output_base])
+runner = Bubbletea::Runner.new(app)
+app.notifier = runner
 
 begin
-  ui.banner
-
-  spec = RateCard::Wizard.new(
-    prompt: prompt,
-    ui: ui,
-    output_base: options[:output_base]
-  ).run
-
-  if spec.nil?
-    ui.info('Cancelled — nothing was built.')
-    exit 0
-  end
-
-  spec.show_table = options[:show_table]
-
-  exit RateCard::Runner.new(
-    spec: spec,
-    client: RateCard::Client.new(token: spec.token),
-    ui: ui
-  ).run
-rescue RateCard::Unauthorized
-  ui.error('Production rejected that token. Check it is a current eHub API token.')
-  exit 1
-rescue RateCard::NoServices
-  ui.error('This token has no shipping services enabled — nothing to build a card from.')
-  exit 1
-rescue RateCard::OutputNotWritable => e
-  ui.error(e.message)
-  exit 1
-rescue RateCard::Error, ArgumentError => e
-  ui.error(e.message)
-  exit 1
+  runner.run
 rescue Interrupt
   ui.blank
   ui.info('Cancelled.')
   exit 130
 end
+
+if app.cancelled?
+  ui.info('Cancelled — nothing was built.')
+  exit 0
+end
+
+# Errors are carried out of the loop rather than raised through it, so the
+# terminal is restored before anything is printed.
+case app.error
+when nil then nil
+when RateCard::Unauthorized
+  ui.error('Production rejected that token. Check it is a current eHub API token.')
+  exit 1
+when RateCard::NoServices
+  ui.error('This token has no shipping services enabled — nothing to build a card from.')
+  exit 1
+when RateCard::OutputNotWritable
+  ui.error(app.error.message)
+  exit 1
+else
+  ui.error(app.error.message)
+  exit 1
+end
+
+spec = app.spec
+spec.show_table = options[:show_table]
+
+exit RateCard::Runner.new(spec: spec, grid: app.grid, ui: ui).run

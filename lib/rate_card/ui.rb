@@ -1,99 +1,62 @@
 # frozen_string_literal: true
 
-require 'pastel'
-require 'tty-box'
-require 'tty-progressbar'
-require 'tty-spinner'
+require_relative 'tui/theme'
 
 module RateCard
-  # Everything this tool prints goes through here, so no other class touches
-  # colour codes and specs can assert against a StringIO.
+  # Plain, non-interactive output: everything printed before the TUI starts or
+  # after it exits — errors, the rate tables, the failure and warning reports,
+  # and where the files went.
+  #
+  # The interactive half (banner, prompts, spinner, progress) moved to TUI::App
+  # when this switched to Bubbletea. What stays here is deliberately dumb line
+  # printing, so tables and reports survive being piped to a file and specs can
+  # still assert against a StringIO.
   class UI
     MAX_LISTED_FAILURES = 10
     MAX_LISTED_WARNINGS = 10
 
     def initialize(io: $stdout)
       @io = io
-      @pastel = Pastel.new(enabled: io.respond_to?(:tty?) && io.tty?)
     end
 
+    # The one thing printed before the TUI starts, so the run says what it
+    # targets before a production token is pasted into it.
     def banner
       @io.puts
-      @io.puts TTY::Box.frame(
-        'eHub Rate Card Builder',
-        "#{@pastel.red('●')} production · api.ehub.com",
-        padding: [0, 1],
-        border: :thick
-      )
+      @io.puts TUI::Theme.banner
+      @io.puts
     end
 
-    # email is accepted and ignored so the caller can splat Token.decode directly.
-    def customer_confirmed(name:, customer_id:, email: nil)
-      @io.puts "  #{@pastel.green('✓')} #{@pastel.bold(name)} (customer_id #{customer_id})"
+    # No newline: the answer is typed on the same line.
+    def prompt(message)
+      @io.print "#{TUI::Theme.accent(TUI::Theme::CURSOR)} #{TUI::Theme.bold(message)}"
+      @io.flush
     end
 
     def info(message)
-      @io.puts "#{@pastel.cyan('▸')} #{message}"
+      @io.puts "#{TUI::Theme.accent(TUI::Theme::BULLET)} #{message}"
     end
 
     def warn(message)
-      @io.puts "  #{@pastel.yellow('⚠')} #{message}"
+      @io.puts "  #{TUI::Theme.warning(TUI::Theme::ALERT)} #{message}"
     end
 
     def error(message)
-      @io.puts "  #{@pastel.red('✗')} #{message}"
+      @io.puts "  #{TUI::Theme.danger(TUI::Theme::CROSS)} #{message}"
     end
 
     def success(message)
-      @io.puts "  #{@pastel.green('✓')} #{message}"
+      @io.puts "  #{TUI::Theme.ok(TUI::Theme::TICK)} #{message}"
     end
 
     def blank
       @io.puts
     end
 
-    # The last thing shown before the confirm, so it repeats every answer back:
-    # eight prompts earlier the user cannot otherwise check what they chose, and
-    # the alternative is confirming a slow production run on a bare number.
-    def recap(spec)
-      @io.puts
-      @io.puts "  #{@pastel.bold(spec.carrier)} · #{spec.service_names.join(', ')}"
-      @io.puts "  zones #{spec.zone_summary} · weights #{spec.weight_summary} · " \
-               "#{spec.package_type}"
-      @io.puts "  columns: #{spec.rate_key_labels.join(', ')}"
-      @io.puts "  #{@pastel.bold(spec.call_count.to_s)} rate calls against production"
-    end
-
-    # Wraps a slow step with a spinner, returning the block's value.
-    def with_spinner(message)
-      spinner = TTY::Spinner.new("#{@pastel.cyan(':spinner')} #{message}", format: :dots,
-                                                                          output: @io)
-      spinner.auto_spin
-      result = yield
-      spinner.success(@pastel.green('✓'))
-      result
-    rescue StandardError
-      spinner.error(@pastel.red('✗'))
-      raise
-    end
-
-    # Yields a callable that advances the bar once per completed call.
-    def with_progress(total)
-      bar = TTY::ProgressBar.new(
-        '  fetching [:bar] :current/:total · :elapsed elapsed',
-        total: total, output: @io, bar_format: :block
-      )
-      # ensure, not a plain call after yield: a rejected token aborts the fetch
-      # mid-bar, and without this the error prints under a half-drawn bar.
-      yield(-> { bar.advance })
-    ensure
-      bar.finish
-    end
-
     def print_tables(tables)
       tables.each do |title, rendered|
         @io.puts
-        @io.puts "  #{@pastel.bold(title)}"
+        @io.puts "  #{TUI::Theme.bold(title)}"
         @io.puts rendered
       end
     end

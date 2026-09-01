@@ -1,0 +1,300 @@
+# frozen_string_literal: true
+
+require 'base64'
+require 'pathname'
+require 'tmpdir'
+require 'support/keys'
+
+# The wizard's coverage, carried over from wizard_spec after the Bubbletea
+# switch. Nothing here runs a Bubbletea::Runner: App is a plain
+# init/update/view model, so a run is just a list of key messages fed to
+# #update — no pty, no fake prompt object, no blocking reads.
+RSpec.describe RateCard::TUI::App do
+  def jwt_for(customer_id, email)
+    encode = ->(h) { Base64.urlsafe_encode64(JSON.generate(h), padding: false) }
+    "#{encode.call({ alg: 'none' })}." \
+      "#{encode.call({ data: { user: { customer_id: customer_id, email: email } } })}.sig"
+  end
+
+  let(:token) { jwt_for(1042, 'ops@acme.test') }
+
+  let(:catalog_body) do
+    { 'services' => [
+      { 'service_id' => 1172, 'service_code' => 'GroundAdvantage',
+        'service' => 'USPS Ground Advantage', 'carrier_code' => 'usps' },
+      { 'service_id' => 392, 'service_code' => 'FEDEX_GROUND',
+        'service' => 'FedEx Ground', 'carrier_code' => 'fedex' }
+    ] }
+  end
+
+  let(:catalog_client) { FakeClient.new(services: catalog_body) }
+
+  def app(output_base: Pathname.new('/tmp/rc'), client: catalog_client, tok: token)
+    described_class.new(token: tok, output_base: output_base,
+                        client_factory: ->(_token) { client })
+  end
+
+  # Feeds keys through #update the way the runner would, and runs any Proc
+  # command inline so the catalogue lookup resolves without a thread.
+  def press(model, *messages)
+    messages.flatten.each do |message|
+      _model, command = model.update(message)
+      run_command(model, command)
+    end
+    model
+  end
+
+  def run_command(model, command)
+    return unless command.is_a?(Proc)
+
+    result = command.call
+    return unless result.is_a?(Bubbletea::Message)
+
+    _model, next_command = model.update(result)
+    run_command(model, next_command)
+  end
+
+  def start(**options)
+    model = app(**options)
+    _model, command = model.init
+    run_command(model, command)
+    model
+  end
+
+  # carrier (USPS is first), services (tick first), zones, unit, weights,
+  # package type, rate keys — each defaulted or first-choice.
+  def answer_happy_path(model)
+    press(model, Keys.enter)                     # carrier: usps
+    press(model, Keys.space, Keys.enter)         # services: first
+    press(model, Keys.enter)                     # zones: default 1-8
+    press(model, Keys.enter)                     # unit: oz
+    press(model, Keys.enter)                     # weights: default 1-16
+    press(model, Keys.enter)                     # package type
+    press(model, Keys.enter)                     # rate keys: both pre-ticked
+    model
+  end
+
+  # The confirm is reached but not answered, so the spec can be inspected
+  # without the fetch starting.
+  def spec_from(model)
+    model.send(:build_spec)
+  end
+
+  describe 'the happy path' do
+    it 'builds a validated RunSpec' do
+      model = answer_happy_path(start)
+
+      spec = spec_from(model)
+      expect(spec).to be_a(RateCard::RunSpec)
+      expect { spec.validate! }.not_to raise_error
+    end
+
+    it 'carries the token and decoded customer identity onto the spec' do
+      spec = spec_from(answer_happy_path(start))
+
+      expect(spec.token).to eq(token)
+      expect(spec.customer_name).to eq('ops@acme.test')
+      expect(spec.customer_id).to eq(1042)
+    end
+
+    it 'defaults zones to the carrier full range, oz, 1-16, parcel, both rate keys' do
+      spec = spec_from(answer_happy_path(start))
+
+      expect(spec.zones).to eq((1..8).to_a)
+      expect(spec.weight_unit).to eq(:oz)
+      expect(spec.weights).to eq((1..16).to_a)
+      expect(spec.package_type).to eq('parcel')
+      expect(spec.rate_keys).to eq(%i[shipper_rate meter_rate])
+    end
+
+    it 'sets output_base and started_at' do
+      spec = spec_from(answer_happy_path(start))
+
+      expect(spec.output_base).to eq(Pathname.new('/tmp/rc'))
+      expect(spec.started_at).to be_a(Time)
+    end
+
+    it 'offers only the services discovered for the chosen carrier' do
+      model = start
+      press(model, Keys.enter) # carrier: usps
+
+      expect(model.view).to include('USPS Ground Advantage')
+      expect(model.view).not_to include('FedEx Ground')
+    end
+  end
+
+  describe 'the transcript' do
+    it 'confirms the decoded customer as soon as the catalogue loads' do
+      model = start
+
+      expect(model.view).to include('ops@acme.test', '1042')
+    end
+
+    it 'keeps each answer on screen as the wizard moves on' do
+      model = answer_happy_path(start)
+
+      expect(model.view).to include('services: USPS Ground Advantage')
+      expect(model.view).to include('zones: 1-8')
+      expect(model.view).to include('weights: 1-16')
+    end
+  end
+
+  describe 'the recap' do
+    it 'repeats every answer back before the confirm' do
+      view = answer_happy_path(start).view
+
+      expect(view).to include('USPS')
+      expect(view).to include('USPS Ground Advantage')
+      expect(view).to include('zones 1-8')
+      expect(view).to include('weights 1-16 oz')
+      expect(view).to include('parcel')
+      expect(view).to include('shipper rate, meter rate')
+      expect(view).to include('128 rate calls against production')
+      expect(view).to include('Build this rate card?')
+    end
+  end
+
+  describe 'declining and cancelling' do
+    it 'is cancelled when the confirmation is declined' do
+      model = answer_happy_path(start)
+      press(model, Keys.char('n'))
+
+      expect(model).to be_cancelled
+      expect(model.spec).to be_nil
+    end
+
+    # The runner renders once more after the loop stops, so a declined run has
+    # to have a view that does not reach for a spec it never built.
+    it 'still renders after a decline' do
+      model = answer_happy_path(start)
+      press(model, Keys.char('n'))
+
+      expect { model.view }.not_to raise_error
+    end
+
+    it 'still renders after ctrl-c' do
+      model = answer_happy_path(start)
+      press(model, Keys.ctrl_c)
+
+      expect { model.view }.not_to raise_error
+    end
+
+    # Enter alone must not start a production run.
+    it 'treats a bare enter at the confirm as a decline' do
+      model = answer_happy_path(start)
+      press(model, Keys.enter)
+
+      expect(model).to be_cancelled
+    end
+
+    it 'is cancelled by ctrl-c at any point' do
+      model = start
+      press(model, Keys.ctrl_c)
+
+      expect(model).to be_cancelled
+    end
+  end
+
+  describe 'bad input' do
+    it 're-prompts when the zone answer contains no valid zone' do
+      model = start
+      press(model, Keys.enter)
+      press(model, Keys.space, Keys.enter)
+      press(model, Keys.type('99'), Keys.enter)
+
+      expect(model.view).to include('no valid zones')
+
+      press(model, Keys.type('1-3'), Keys.enter)
+      expect(model.view).to include('zones: 1-3')
+    end
+
+    it 're-prompts when the weight answer is unparseable' do
+      model = start
+      press(model, Keys.enter)
+      press(model, Keys.space, Keys.enter)
+      press(model, Keys.enter)
+      press(model, Keys.enter)
+      press(model, Keys.type('abc'), Keys.enter)
+
+      expect(model.view).to include('range like 1-16')
+    end
+  end
+
+  describe 'the catalogue lookup' do
+    it 'reports NoServices when the catalogue is empty' do
+      model = start(client: FakeClient.new(services: { 'services' => [] }))
+
+      expect(model.error).to be_a(RateCard::NoServices)
+    end
+
+    it 'carries Unauthorized out of the loop rather than raising through it' do
+      rejected = RateCard::Unauthorized.new('production rejected this token')
+
+      model = nil
+      expect { model = start(client: FakeClient.new(services: rejected)) }.not_to raise_error
+      expect(model.error).to be_a(RateCard::Unauthorized)
+    end
+  end
+
+  describe 'the fetch' do
+    # Moved here from runner_spec when the fetch moved into the event loop.
+    # Still before the first call, so a bad path is not discovered after 128.
+    it 'checks writability before making any call, and reports rather than raising' do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, 'blocker'), 'x')
+        client = FakeClient.new(services: catalog_body) { |_w, _p| { 'service_rates' => [] } }
+        model = start(output_base: Pathname.new(File.join(dir, 'blocker', 'sub')), client: client)
+        answer_happy_path(model)
+
+        expect { press(model, Keys.char('y')) }.not_to raise_error
+        expect(model.error).to be_a(RateCard::OutputNotWritable)
+        expect(client.payloads).to be_empty
+        expect(model.grid).to be_nil
+      end
+    end
+
+    it 'carries the finished grid out of the loop for the caller to report on' do
+      Dir.mktmpdir do |dir|
+        client = FakeClient.new(services: catalog_body) do |weight, _postal|
+          { 'service_rates' => [{ 'service_id' => 1172, 'rate' => weight * 1.0 }] }
+        end
+        model = start(output_base: Pathname.new(dir), client: client)
+        answer_happy_path(model)
+        press(model, Keys.char('y'))
+
+        expect(model.grid).to be_a(RateCard::Grid)
+        expect(model.grid.any_rates?).to be(true)
+        expect(model).not_to be_cancelled
+      end
+    end
+  end
+
+  describe 'package types' do
+    def catalog_with(package_types)
+      { 'services' => [{ 'service_id' => 1172, 'service_code' => 'GroundAdvantage',
+                         'service' => 'USPS Ground Advantage', 'carrier_code' => 'usps',
+                         'package_types' => package_types }] }
+    end
+
+    it 'offers the package types the selected service reports' do
+      body = catalog_with([{ 'type' => 'parcel' }, { 'type' => 'flat_rate_box' }])
+      model = start(client: FakeClient.new(services: body))
+      press(model, Keys.space, Keys.enter) # services (single carrier, so no carrier step)
+      press(model, Keys.enter)             # zones
+      press(model, Keys.enter)             # unit
+
+      press(model, Keys.enter)             # weights -> package type field
+      expect(model.view).to include('flat_rate_box')
+    end
+
+    it 'falls back to the built-in package types when the catalogue lists none' do
+      model = start(client: FakeClient.new(services: catalog_with([])))
+      press(model, Keys.space, Keys.enter)
+      press(model, Keys.enter)
+      press(model, Keys.enter)
+      press(model, Keys.enter)
+
+      expect(model.view).to include('flat_rate_envelope')
+    end
+  end
+end

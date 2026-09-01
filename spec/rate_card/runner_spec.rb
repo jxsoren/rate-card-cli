@@ -31,21 +31,28 @@ RSpec.describe RateCard::Runner do
     Dir.mktmpdir { |dir| @dir = dir; example.run }
   end
 
+  # Runner no longer fetches — TUI::App does, inside the event loop, so the bar
+  # can be live — so a spec builds the grid itself and hands over the result.
+  def report(spec, client)
+    grid = RateCard::Grid.build(spec: spec, client: client)
+    described_class.new(spec: spec, grid: grid, ui: ui)
+  end
+
   it 'returns exit code 0 on a fully successful run' do
     spec = spec_in(@dir)
 
-    expect(described_class.new(spec: spec, client: good_client, ui: ui).run).to eq(0)
+    expect(report(spec, good_client).run).to eq(0)
   end
 
   it 'writes the csv files' do
     spec = spec_in(@dir)
-    described_class.new(spec: spec, client: good_client, ui: ui).run
+    report(spec, good_client).run
 
     expect(spec.run_dir.join('GroundAdvantage_shipper_rate.csv')).to exist
   end
 
   it 'prints the table to stdout' do
-    described_class.new(spec: spec_in(@dir), client: good_client, ui: ui).run
+    report(spec_in(@dir), good_client).run
 
     expect(io.string).to include('shipper rate')
     expect(io.string).to include('┌')
@@ -53,14 +60,14 @@ RSpec.describe RateCard::Runner do
 
   it 'skips the table when show_table is false but still writes files' do
     spec = spec_in(@dir, show_table: false)
-    described_class.new(spec: spec, client: good_client, ui: ui).run
+    report(spec, good_client).run
 
     expect(io.string).not_to include('┌')
     expect(spec.run_dir.join('GroundAdvantage_shipper_rate.csv')).to exist
   end
 
   it 'reports where the files were saved' do
-    described_class.new(spec: spec_in(@dir), client: good_client, ui: ui).run
+    report(spec_in(@dir), good_client).run
 
     expect(io.string).to include('Saved 1 file')
     expect(io.string).to include('GroundAdvantage_shipper_rate.csv')
@@ -72,7 +79,7 @@ RSpec.describe RateCard::Runner do
     end
     spec = spec_in(@dir)
 
-    expect(described_class.new(spec: spec, client: client, ui: ui).run).to eq(0)
+    expect(report(spec, client).run).to eq(0)
     expect(spec.run_dir.join('GroundAdvantage_shipper_rate.csv')).to exist
     expect(io.string).to include('cells failed')
   end
@@ -81,7 +88,7 @@ RSpec.describe RateCard::Runner do
     client = FakeClient.new { |_w, _p| { 'service_rates' => [] } }
     spec = spec_in(@dir)
 
-    expect(described_class.new(spec: spec, client: client, ui: ui).run).to eq(1)
+    expect(report(spec, client).run).to eq(1)
     expect(io.string).to include('no rates for the selected')
     expect(io.string).not_to include('every rate call failed')
     expect(spec.run_dir).not_to exist
@@ -91,19 +98,10 @@ RSpec.describe RateCard::Runner do
     client = FakeClient.new { |_w, _p| RateCard::RequestFailed.new('down') }
     spec = spec_in(@dir)
 
-    expect(described_class.new(spec: spec, client: client, ui: ui).run).to eq(1)
+    expect(report(spec, client).run).to eq(1)
     expect(spec.run_dir).not_to exist
   end
 
-  it 'checks writability before making any call' do
-    File.write(File.join(@dir, 'blocker'), 'x')
-    spec = spec_in(File.join(@dir, 'blocker', 'sub'))
-    client = good_client
-
-    expect { described_class.new(spec: spec, client: client, ui: ui).run }
-      .to raise_error(RateCard::OutputNotWritable)
-    expect(client.payloads).to be_empty
-  end
   # The docs: a carrier failure comes back as a 201 with a populated warnings
   # array. Without reporting it, the user gets blank cells and no reason.
   it 'reports the API warnings from a call that otherwise succeeded' do
@@ -112,7 +110,7 @@ RSpec.describe RateCard::Runner do
         'warnings' => ['FedEx returned error: Destination postal code missing or invalid'] }
     end
 
-    described_class.new(spec: spec_in(@dir), client: client, ui: ui).run
+    report(spec_in(@dir), client).run
 
     expect(io.string).to include('Destination postal code missing or invalid')
   end
@@ -122,7 +120,7 @@ RSpec.describe RateCard::Runner do
       { 'service_rates' => [], 'warnings' => ['USPS returned error: service not enabled'] }
     end
 
-    code = described_class.new(spec: spec_in(@dir), client: client, ui: ui).run
+    code = report(spec_in(@dir), client).run
 
     expect(code).to eq(1)
     expect(io.string).to include('service not enabled')

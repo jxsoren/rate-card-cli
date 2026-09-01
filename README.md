@@ -11,6 +11,11 @@ bundle install
 
 Ruby 3.3.4 (pinned in `.ruby-version`).
 
+The TUI is [bubbletea-ruby](https://github.com/marcoroth/bubbletea-ruby) with `bubbles` and
+`lipgloss`. These ship precompiled native binaries, so no Go toolchain is needed to install
+them. Note that `bubbles` is a shared gem name — `0.0.x` is an unrelated gem that pulls in
+`aws-sdk` — which is why the Gemfile pins `~> 0.1`.
+
 ## Use
 
 ```bash
@@ -26,9 +31,32 @@ No flags needed — the wizard asks for everything:
    including services that would not quote at a single probe weight.
 3. **Zones** (`1-8`, or `1,3,5`), **weight unit** (`oz`/`lbs`), **weight range**,
    **package type**, **rate columns** (shipper rate, meter rate).
-4. A recap with the call count, and a confirm. Declining does nothing at all.
+4. A recap of every answer, with the call count, and a confirm. Enter alone declines —
+   only `y` starts a run. Declining does nothing at all.
 
 Bad input at the zone or weight prompt re-prompts; it never costs you the run.
+
+### Keys
+
+| Key | Effect |
+| --- | --- |
+| `↑` / `↓`, `k` / `j` | Move between choices |
+| `space` | Tick or untick (services, rate columns) |
+| `a` | Tick or untick everything |
+| `enter` | Confirm the answer |
+| `ctrl-c` | Abandon the run at any point |
+
+Answered questions stay on screen as you go, and the fetch shows a live bar with a running
+count of failed cells — so a run that is going wrong can be abandoned early rather than waited
+out.
+
+### One caveat: paste only the token
+
+The token prompt is deliberately a plain readline **before** the TUI starts, because
+bubbletea-ruby 0.1.4's input reader returns one key per poll and discards the rest of the
+buffered bytes: a pasted 200-character JWT arrives as a single character. Typing is unaffected
+at any speed, so every other answer is safe inside the TUI — but **type** the zone and weight
+ranges rather than pasting them. `spike/burst_probe.rb` reproduces the underlying bug.
 
 For a bare `rate-card` command:
 
