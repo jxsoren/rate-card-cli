@@ -64,6 +64,7 @@ RSpec.describe RateCard::TUI::App do
   # carrier (USPS is first), services (tick first), zones, unit, weights,
   # package type, rate keys — each defaulted or first-choice.
   def answer_happy_path(model)
+    press(model, Keys.enter)                     # rate by: weight
     press(model, Keys.enter)                     # carrier: usps
     press(model, Keys.space, Keys.enter)         # services: first
     press(model, Keys.enter)                     # zones: default 1-8
@@ -139,6 +140,7 @@ RSpec.describe RateCard::TUI::App do
 
     it 'offers only the services discovered for the chosen carrier' do
       model = start
+      press(model, Keys.enter) # rate by: weight
       press(model, Keys.enter) # carrier: usps
 
       expect(model.view).to include('USPS Ground Advantage')
@@ -199,21 +201,22 @@ RSpec.describe RateCard::TUI::App do
 
     it 'walks all the way back to the first question' do
       model = answer_happy_path(start)
-      7.times { press(model, Keys.esc) }
+      8.times { press(model, Keys.esc) }
 
-      expect(model.view).to include('Carrier')
+      expect(model.view).to include('Rate by')
     end
 
     it 'stays put at the first question rather than falling out of the wizard' do
       model = start
       3.times { press(model, Keys.esc) }
 
-      expect(model.view).to include('Carrier')
+      expect(model.view).to include('Rate by')
       expect(model).not_to be_cancelled
     end
 
     it 'reopens a select on the answer it already has' do
       model = start
+      press(model, Keys.enter) # rate by: weight
       press(model, Keys.down, Keys.enter) # carrier: fedex
       press(model, Keys.esc)
 
@@ -267,8 +270,9 @@ RSpec.describe RateCard::TUI::App do
   describe 'bad input' do
     it 're-prompts when the zone answer contains no valid zone' do
       model = start
-      press(model, Keys.enter)
-      press(model, Keys.space, Keys.enter)
+      press(model, Keys.enter) # rate by: weight
+      press(model, Keys.enter) # carrier
+      press(model, Keys.space, Keys.enter) # services
       press(model, Keys.type('99'), Keys.enter)
 
       expect(model.view).to include('no valid zones')
@@ -279,10 +283,11 @@ RSpec.describe RateCard::TUI::App do
 
     it 're-prompts when the weight answer is unparseable' do
       model = start
-      press(model, Keys.enter)
-      press(model, Keys.space, Keys.enter)
-      press(model, Keys.enter)
-      press(model, Keys.enter)
+      press(model, Keys.enter) # rate by: weight
+      press(model, Keys.enter) # carrier
+      press(model, Keys.space, Keys.enter) # services
+      press(model, Keys.enter) # zones
+      press(model, Keys.enter) # unit
       press(model, Keys.type('abc'), Keys.enter)
 
       expect(model.view).to include('range like 1-16')
@@ -413,6 +418,7 @@ RSpec.describe RateCard::TUI::App do
     it 'offers the package types the selected service reports' do
       body = catalog_with([{ 'type' => 'parcel' }, { 'type' => 'flat_rate_box' }])
       model = start(client: FakeClient.new(services: body))
+      press(model, Keys.enter)             # rate by: weight (single USPS service present)
       press(model, Keys.space, Keys.enter) # services (single carrier, so no carrier step)
       press(model, Keys.enter)             # zones
       press(model, Keys.enter)             # unit
@@ -423,12 +429,60 @@ RSpec.describe RateCard::TUI::App do
 
     it 'falls back to the built-in package types when the catalogue lists none' do
       model = start(client: FakeClient.new(services: catalog_with([])))
+      press(model, Keys.enter)
       press(model, Keys.space, Keys.enter)
       press(model, Keys.enter)
       press(model, Keys.enter)
       press(model, Keys.enter)
 
       expect(model.view).to include('flat_rate_envelope')
+    end
+  end
+
+  describe 'cubic mode' do
+    def answer_cubic_path(model)
+      press(model, Keys.down, Keys.enter)  # rate by: cubic dimensions
+      press(model, Keys.space, Keys.enter) # services: first (USPS, only carrier left)
+      press(model, Keys.enter)             # zones
+      press(model, Keys.enter)             # cubic tiers: all pre-ticked
+      press(model, Keys.enter)             # package type
+      press(model, Keys.enter)             # rate keys
+      model
+    end
+
+    it 'restricts the carrier to USPS and skips the weight-unit question' do
+      model = answer_cubic_path(start)
+
+      expect(model.view).not_to include('Weight unit')
+      spec = spec_from(model)
+      expect(spec.carrier).to eq('USPS')
+    end
+
+    it 'offers the ten official cubic tiers, all ticked by default' do
+      model = start
+      press(model, Keys.down, Keys.enter)  # rate by: cubic dimensions
+      press(model, Keys.space, Keys.enter) # services
+      press(model, Keys.enter)             # zones
+
+      expect(model.view).to include('Tier 1')
+      expect(model.view).to include('10/10 selected')
+    end
+
+    it 'builds a validated RunSpec in cubic mode with every tier selected' do
+      spec = spec_from(answer_cubic_path(start))
+
+      expect(spec.rate_mode).to eq(:cubic)
+      expect(spec.cubic_tiers).to eq((1..10).to_a)
+      expect { spec.validate! }.not_to raise_error
+    end
+
+    it 'skips the rate-by question entirely when the token has no USPS services' do
+      body = { 'services' => [{ 'service_id' => 392, 'service_code' => 'FEDEX_GROUND',
+                                'service' => 'FedEx Ground', 'carrier_code' => 'fedex' }] }
+      model = start(client: FakeClient.new(services: body))
+
+      expect(model.view).not_to include('Rate by')
+      expect(model.view).to include('Services')
     end
   end
 end

@@ -24,7 +24,7 @@ module RateCard
 
       # No :token stage — see TokenPrompt for why it cannot live in the loop.
       STAGES = %i[
-        loading carrier services zones unit weights package_type
+        loading rate_mode carrier services zones unit weights package_type
         rate_keys confirm fetching
       ].freeze
 
@@ -174,6 +174,7 @@ module RateCard
 
       def field_for(stage)
         case stage
+        when :rate_mode    then rate_mode_field
         when :carrier      then carrier_field
         when :services     then services_field
         when :zones        then zones_field
@@ -195,6 +196,18 @@ module RateCard
                            choices: [['Run', :run], ['Back', :back]], selected: 1)
       end
 
+      # Only asked when the token has at least one USPS service — cubic
+      # pricing is USPS-only, so a token with none has nothing to offer here
+      # and the question is decided as :weight and skipped, same as every
+      # other single-answer stage.
+      def rate_mode_field
+        return nil unless @services.any? { |service| service.carrier == 'USPS' }
+
+        choices = [['Weight', :weight], ['Cubic dimensions', :cubic]]
+        Fields::Select.new(label: 'Rate by', choices: choices,
+                           selected: choices.index { |_, mode| mode == @answers[:rate_mode] } || 0)
+      end
+
       def carrier_field
         carriers = selectable_carriers
         return nil if carriers.length <= 1
@@ -207,9 +220,12 @@ module RateCard
       # chart is dropped from the menu rather than offered and then refused
       # mid-run by Addresses.for_carrier.
       def selectable_carriers
-        ServiceCatalog.group_by_carrier(@services)
-                      .keys
-                      .select { |carrier| Constants::Addresses.supported?(carrier) }
+        carriers = ServiceCatalog.group_by_carrier(@services)
+                                 .keys
+                                 .select { |carrier| Constants::Addresses.supported?(carrier) }
+        return carriers & ['USPS'] if @answers[:rate_mode] == :cubic
+
+        carriers
       end
 
       def services_field
@@ -238,13 +254,19 @@ module RateCard
         )
       end
 
+      # Weight is fixed per cubic tier, so asking for a display unit is
+      # meaningless in cubic mode — decided as :oz (unused) and skipped.
       def unit_field
+        return nil if @answers[:rate_mode] == :cubic
+
         choices = [['oz', :oz], ['lbs', :lbs]]
         Fields::Select.new(label: 'Weight unit', choices: choices,
                            selected: choices.index { |_, unit| unit == @answers[:unit] } || 0)
       end
 
       def weights_field
+        return cubic_tiers_field if @answers[:rate_mode] == :cubic
+
         answered = @answers[:weights]
 
         Fields::Text.new(
@@ -257,6 +279,19 @@ module RateCard
 
             weights
           }
+        )
+      end
+
+      # Stored under the same @answers[:weights] key the weight-range text
+      # field uses (an array of ids rather than an array of weights) so
+      # #advance, #retreat and #build_spec do not need a third answer slot.
+      def cubic_tiers_field
+        choices = Constants::CubicTiers.choices
+        answered = @answers[:weights]
+        Fields::MultiSelect.new(
+          label: 'Cubic tiers',
+          choices: choices,
+          checked: answered ? checked_indexes(choices.map(&:last), answered) : (0...choices.length)
         )
       end
 
@@ -382,6 +417,7 @@ module RateCard
       end
 
       def build_spec
+        cubic = @answers[:rate_mode] == :cubic
         RunSpec.new(
           token: @token,
           customer_name: identity[:name],
@@ -389,8 +425,10 @@ module RateCard
           carrier: carrier,
           services: @answers[:services],
           zones: @answers[:zones],
-          weight_unit: @answers[:unit],
-          weights: @answers[:weights],
+          weight_unit: @answers[:unit] || :oz,
+          weights: cubic ? [] : @answers[:weights],
+          cubic_tiers: cubic ? @answers[:weights] : [],
+          rate_mode: @answers[:rate_mode] || :weight,
           package_type: @answers[:package_type],
           rate_keys: @answers[:rate_keys],
           output_base: @output_base,
@@ -420,12 +458,18 @@ module RateCard
       def recap_view
         [
           "  #{Theme.bold(carrier)} · #{@answers[:services].map(&:name).join(', ')}",
-          "  zones #{RunSpec.compact_range(@answers[:zones])} · " \
-            "weights #{RunSpec.compact_range(@answers[:weights])} #{@answers[:unit]} · " \
-            "#{@answers[:package_type]}",
+          "  zones #{RunSpec.compact_range(@answers[:zones])} · #{rows_recap} · #{@answers[:package_type]}",
           "  columns: #{@answers[:rate_keys].map { |k| RunSpec::RATE_KEY_LABELS.fetch(k) }.join(', ')}",
           "  #{Theme.bold(call_count.to_s)} rate calls against #{Theme.danger('production')}"
         ].join("\n")
+      end
+
+      def rows_recap
+        if @answers[:rate_mode] == :cubic
+          "cubic tiers #{RunSpec.compact_range(@answers[:weights])}"
+        else
+          "weights #{RunSpec.compact_range(@answers[:weights])} #{@answers[:unit]}"
+        end
       end
 
       def call_count
@@ -454,7 +498,7 @@ module RateCard
       # transcript of the run stays on screen — the recap is then a summary of
       # what is already visible rather than the first chance to check it.
       def answered_line(stage, value)
-        label = { carrier: 'carrier', services: 'services', zones: 'zones',
+        label = { rate_mode: 'rate by', carrier: 'carrier', services: 'services', zones: 'zones',
                   unit: 'unit', weights: 'weights', package_type: 'package',
                   rate_keys: 'columns' }[stage]
         return nil if label.nil?
