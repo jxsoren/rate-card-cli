@@ -69,7 +69,9 @@ No flags needed — the wizard asks for everything:
    services, since USPS cubic pricing (Ground Advantage Cubic, Priority Mail Cubic) is
    priced by which of ten official volume tiers the package falls into, not by weight.
    Choosing Cubic restricts the carrier to USPS and replaces the weight-unit and
-   weight-range questions with a multi-select of the ten tiers.
+   weight-range questions with a multi-select of the ten tiers. Choosing Cubic does not check
+   that the service you go on to pick is actually cubic-priced — you're responsible for
+   selecting a cubic-rated USPS service (e.g. "USPS Ground Advantage Cubic").
 3. **Carrier**, then **services** — the list comes from the customer's own service catalogue
    (`GET /api/v2/services?category=shipping`), so it is exactly what that customer has enabled,
    including services that would not quote at a single probe weight.

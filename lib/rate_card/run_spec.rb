@@ -44,11 +44,7 @@ module RateCard
       self.class.compact_range(zones)
     end
 
-    def weight_summary
-      "#{self.class.compact_range(weights)} #{weight_unit}"
-    end
-
-    # [1,2,3,5] => "1-3,5". Runs of three or more collapse; a pair stays listed,
+# [1,2,3,5] => "1-3,5". Runs of three or more collapse; a pair stays listed,
     # since "4,5" is no longer than "4-5" and reads as what the user typed.
     def self.compact_range(numbers)
       sorted = numbers.to_a.sort.uniq

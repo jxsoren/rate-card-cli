@@ -43,12 +43,11 @@ RSpec.describe RateCard::RunSpec do
     end
   end
 
-  describe '#zone_summary / #weight_summary / #service_names / #rate_key_labels' do
+  describe '#zone_summary / #service_names / #rate_key_labels' do
     it 'describes the run for the pre-confirm recap' do
       spec = build(zones: [1, 2, 3, 7], weights: [1, 2, 3, 4], weight_unit: :lbs)
 
       expect(spec.zone_summary).to eq('1-3,7')
-      expect(spec.weight_summary).to eq('1-4 lbs')
       expect(spec.service_names).to eq(['USPS Ground Advantage'])
       expect(spec.rate_key_labels).to eq(['shipper rate', 'meter rate'])
     end

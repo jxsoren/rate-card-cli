@@ -10,6 +10,15 @@ RSpec.describe RateCard::UI do
   let(:io) { StringIO.new }
   subject(:ui) { described_class.new(io: io) }
 
+  let(:weight_spec) do
+    RateCard::RunSpec.new(
+      token: 'tok', customer_name: 'Acme', customer_id: 1, carrier: 'USPS',
+      services: [], zones: [1], weight_unit: :oz, weights: [1, 2],
+      package_type: 'parcel', rate_keys: [:shipper_rate],
+      output_base: Pathname.new('/tmp'), show_table: true, started_at: Time.now
+    )
+  end
+
   describe '#info / #warn / #error / #success' do
     it 'prints each message' do
       ui.info('probing')
@@ -32,13 +41,13 @@ RSpec.describe RateCard::UI do
 
   describe '#failure_report' do
     it 'prints nothing when there are no failures' do
-      ui.failure_report([])
+      ui.failure_report([], spec: weight_spec)
 
       expect(io.string).to eq('')
     end
 
     it 'lists each failed cell with its weight, zone and reason' do
-      ui.failure_report([RateCard::Failure.new(weight: 14, zone: 7, message: 'HTTP 500')])
+      ui.failure_report([RateCard::Failure.new(weight: 14, zone: 7, message: 'HTTP 500')], spec: weight_spec)
 
       expect(io.string).to include('1 cell failed')
       expect(io.string).to include('wt 14')
@@ -49,17 +58,32 @@ RSpec.describe RateCard::UI do
     it 'pluralises the count' do
       failures = [RateCard::Failure.new(weight: 1, zone: 1, message: 'a'),
                   RateCard::Failure.new(weight: 2, zone: 1, message: 'b')]
-      ui.failure_report(failures)
+      ui.failure_report(failures, spec: weight_spec)
 
       expect(io.string).to include('2 cells failed')
     end
 
     it 'collapses a long failure list to a summary after ten entries' do
       failures = (1..15).map { |i| RateCard::Failure.new(weight: i, zone: 1, message: 'HTTP 500') }
-      ui.failure_report(failures)
+      ui.failure_report(failures, spec: weight_spec)
 
       expect(io.string).to include('15 cells failed')
       expect(io.string).to include('5 more')
+    end
+
+    it 'labels a failed cubic-tier cell by tier name, with no misleading "wt" prefix' do
+      cubic_spec = RateCard::RunSpec.new(
+        token: 'tok', customer_name: 'Acme', customer_id: 1, carrier: 'USPS',
+        services: [], zones: [1], weight_unit: :oz, weights: [],
+        rate_mode: :cubic, cubic_tiers: [1, 3],
+        package_type: 'parcel', rate_keys: [:shipper_rate],
+        output_base: Pathname.new('/tmp'), show_table: true, started_at: Time.now
+      )
+
+      ui.failure_report([RateCard::Failure.new(weight: 3, zone: 5, message: 'HTTP 500')], spec: cubic_spec)
+
+      expect(io.string).to include('Tier 3')
+      expect(io.string).not_to include('wt 3')
     end
   end
 

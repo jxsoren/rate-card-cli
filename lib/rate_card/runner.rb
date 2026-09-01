@@ -18,7 +18,7 @@ module RateCard
 
     def run
       @ui.print_tables(TableRenderer.new(grid: grid, spec: spec).tables) if spec.show_table
-      @ui.failure_report(grid.failures)
+      @ui.failure_report(grid.failures, spec: spec)
       @ui.warning_report(grid.warnings)
 
       if grid.all_failed?
