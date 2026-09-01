@@ -16,7 +16,7 @@ module RateCard
   class RunSpec < Struct.new(
     :token, :customer_name, :customer_id, :carrier, :services, :zones,
     :weight_unit, :weights, :package_type, :rate_keys, :output_base,
-    :show_table, :started_at,
+    :show_table, :started_at, :rate_mode, :cubic_tiers,
     keyword_init: true
   )
     # Our rate-key name => the field it arrives as in service_rates. Getting
@@ -29,7 +29,7 @@ module RateCard
     # One call returns rates for every enabled service, so service count does
     # not affect call volume.
     def call_count
-      weights.length * zones.length
+      rows.length * zones.length
     end
 
     def service_names
@@ -61,6 +61,53 @@ module RateCard
       weight_unit == :lbs ? weight * 16 : weight
     end
 
+    # Weight mode when not set, so every existing caller — none of which
+    # mentions rate_mode — keeps building a weight x zone card exactly as
+    # before.
+    def rate_mode
+      self[:rate_mode] || :weight
+    end
+
+    # The row axis Grid/CsvWriter/TableRenderer actually sweep: integer
+    # weights in weight mode, selected USPS cubic tier ids in cubic mode.
+    # Downstream code reads only this plus #row_label and #row_header, so
+    # neither has to know which mode produced it.
+    def rows
+      rate_mode == :cubic ? cubic_tiers : weights
+    end
+
+    def row_label(row)
+      rate_mode == :cubic ? Constants::CubicTiers.label(row) : row.to_s
+    end
+
+    def row_header
+      rate_mode == :cubic ? 'cubic_tier' : 'weight'
+    end
+
+    # The weight actually sent on the wire for one row: the tier's fixed
+    # cap in cubic mode (cubic pricing is volume-driven, not weight-driven,
+    # so the display weight_unit plays no part), or the usual oz/lbs
+    # conversion in weight mode.
+    def weight_in_oz_for(row)
+      rate_mode == :cubic ? Constants::CubicTiers.weight_oz(row) : weight_in_oz(row)
+    end
+
+    # nil in weight mode, so Shipment keeps its own fixed nominal box.
+    def dims_for(row)
+      rate_mode == :cubic ? Constants::CubicTiers.dims(row) : nil
+    end
+
+    def validate_rows!
+      if rate_mode == :cubic
+        raise ArgumentError, 'select at least one cubic tier' if cubic_tiers.nil? || cubic_tiers.empty?
+
+        unknown = cubic_tiers - Constants::CubicTiers.ids
+        raise ArgumentError, "unknown cubic tier: #{unknown.join(', ')}" unless unknown.empty?
+      else
+        raise ArgumentError, 'select at least one weight' if weights.nil? || weights.empty?
+      end
+    end
+
     def address_for(zone)
       Constants::Addresses.for_carrier(carrier)[zone]
     end
@@ -70,7 +117,7 @@ module RateCard
     end
 
     def weight_label
-      "wt(#{weight_unit})"
+      rate_mode == :cubic ? 'cubic tier' : "wt(#{weight_unit})"
     end
 
     # Apostrophes are dropped rather than collapsed, so "Bob's" slugs to "bobs"
@@ -99,7 +146,7 @@ module RateCard
     def validate!
       raise ArgumentError, 'select at least one service' if services.nil? || services.empty?
       raise ArgumentError, 'select at least one zone' if zones.nil? || zones.empty?
-      raise ArgumentError, 'select at least one weight' if weights.nil? || weights.empty?
+      validate_rows!
       raise ArgumentError, 'select at least one rate column' if rate_keys.nil? || rate_keys.empty?
 
       unknown = rate_keys - RATE_KEY_FIELDS.keys
