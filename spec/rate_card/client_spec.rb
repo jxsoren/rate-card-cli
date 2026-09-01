@@ -16,7 +16,7 @@ RSpec.describe RateCard::Client do
   end
 
   it 'returns the parsed body on success' do
-    client = client_replaying([201, { 'service_rates' => [{ 'service_id' => 1 }] }])
+    client = client_replaying([200, { 'service_rates' => [{ 'service_id' => 1 }] }])
 
     expect(client.fetch_rates({ shipment: {} })).to eq('service_rates' => [{ 'service_id' => 1 }])
   end
@@ -29,15 +29,17 @@ RSpec.describe RateCard::Client do
     expect(sleeps).to be_empty
   end
 
-  it 'raises Unauthorized on 403' do
-    client = client_replaying([403, {}])
+  it 'raises Unauthorized on 403 without retrying' do
+    sleeps = []
+    client = client_replaying([403, {}], sleeps: sleeps)
 
     expect { client.fetch_rates({}) }.to raise_error(RateCard::Unauthorized)
+    expect(sleeps).to be_empty
   end
 
   it 'retries a 500 twice with backoff and succeeds on the third attempt' do
     sleeps = []
-    client = client_replaying([500, {}], [500, {}], [201, { 'service_rates' => [] }], sleeps: sleeps)
+    client = client_replaying([500, {}], [500, {}], [200, { 'service_rates' => [] }], sleeps: sleeps)
 
     expect(client.fetch_rates({})).to eq('service_rates' => [])
     expect(sleeps).to eq([0.5, 1.0])
@@ -77,6 +79,8 @@ RSpec.describe RateCard::Client do
     described_class.new(token: 'secret-jwt', stubs: stubs).fetch_rates({ shipment: { a: 1 } })
 
     expect(captured.request_headers['Authorization']).to eq('Bearer secret-jwt')
-    expect(JSON.parse(captured.body)).to eq('shipment' => { 'a' => 1 })
+    # request_body, not body: Faraday's Env#body aliases to response_body once a
+    # status is set, so reading .body after the call returns the response.
+    expect(JSON.parse(captured.request_body)).to eq('shipment' => { 'a' => 1 })
   end
 end

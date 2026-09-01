@@ -7,10 +7,18 @@ module RateCard
   # The single network seam. Talks to eHub production and classifies every
   # outcome into: a parsed Hash, Unauthorized, or RequestFailed. Callers never
   # see a Faraday exception.
+  #
+  # The fetch engine depends on this split: it records a nil cell for each
+  # RequestFailed and keeps going, but lets Unauthorized abort the whole run.
+  # Narrowing Unauthorized to 403 only would turn a rejected token into a card
+  # full of blank cells instead of one clear error — do not do that.
   class Client
     BASE_URL = 'https://api.essentialhub.com'
     PATH = '/api/v2/rates/'
 
+    SUCCESS = 200
+    # A rejected token will not improve on retry, so these are never retried.
+    UNAUTHORIZED = [401, 403].freeze
     # 429 and 5xx are transient; everything else is a decision, not a hiccup.
     RETRYABLE = [429, 500, 502, 503, 504].freeze
     BACKOFF = [0.5, 1.0].freeze
@@ -29,9 +37,9 @@ module RateCard
       attempt = 0
       loop do
         status, body = post(payload)
-        return body if status == 201
+        return body if status == SUCCESS
 
-        raise Unauthorized, 'production rejected the token (403)' if status == 403
+        raise Unauthorized, 'production rejected the token (401/403)' if UNAUTHORIZED.include?(status)
 
         unless RETRYABLE.include?(status) && attempt < BACKOFF.length
           raise RequestFailed, "rate call failed with HTTP #{status}#{error_detail(body)}"
