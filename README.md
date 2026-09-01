@@ -68,9 +68,15 @@ No flags needed — the wizard asks for everything:
 2. **Carrier**, then **services** — the list comes from the customer's own service catalogue
    (`GET /api/v2/services?category=shipping`), so it is exactly what that customer has enabled,
    including services that would not quote at a single probe weight.
-3. **Zones** (`1-8`, or `1,3,5`), **weight unit** (`oz`/`lbs`), **weight range**,
+3. **Rate by** — Weight or Cubic dimensions. Only asked when the token has USPS
+   services, since USPS cubic pricing (Ground Advantage Cubic, Priority Mail Cubic) is
+   priced by which of ten official volume tiers the package falls into, not by weight.
+   Choosing Cubic restricts the carrier to USPS and replaces the weight-unit and
+   weight-range questions with a multi-select of the ten tiers.
+4. **Zones** (`1-8`, or `1,3,5`); then, in weight mode, **weight unit** (`oz`/`lbs`) and
+   **weight range** — or, in cubic mode, the **cubic tiers** to include; then
    **package type**, **rate columns** (shipper rate, meter rate).
-4. A recap of every answer, with the call count, and a **Run** / **Back** choice. It opens on
+5. A recap of every answer, with the call count, and a **Run** / **Back** choice. It opens on
    **Back**, so a stray enter carried over from the previous question goes back rather than
    spending 128 production calls; `ctrl-c` abandons the session outright.
 
