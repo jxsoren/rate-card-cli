@@ -24,10 +24,12 @@ RSpec.describe RateCard::Constants::Addresses do
         .to raise_error(RateCard::UnsupportedCarrier, /no curated zone chart for Nonesuch/)
     end
 
-    # The regression this replaced: 'dhl_ecommerce' upcased to a carrier name
-    # in no table, and the USPS fallback then priced DHL against USPS zones.
-    it 'raises for DHL, which has no chart yet, instead of returning USPS' do
-      expect { described_class.for_carrier('DHL') }.to raise_error(RateCard::UnsupportedCarrier)
+    # DHL eCommerce's zone calculator in ehub is an unmodified subclass of
+    # USPS's (app/services/carriers/dhl_ecommerce/zone_calculator.rb), so
+    # DHL eCommerce zones are USPS zones - this is the same chart, not a
+    # coincidence to keep in sync by hand.
+    it 'returns the USPS chart for DHL, since DHL eCommerce zones are USPS zones' do
+      expect(described_class.for_carrier('DHL')).to eq(described_class.for_carrier('USPS'))
     end
 
     it 'gives every address the fields a request payload needs' do
@@ -49,15 +51,16 @@ RSpec.describe RateCard::Constants::Addresses do
       expect(described_class.available_zones('USPS')).to eq((1..8).to_a)
     end
 
-    it 'is empty for a carrier with no chart, so callers need no rescue' do
-      expect(described_class.available_zones('DHL')).to eq([])
+    it 'lists zones 1-8 for DHL, same as USPS' do
+      expect(described_class.available_zones('DHL')).to eq((1..8).to_a)
     end
   end
 
   describe '.supported?' do
     it 'is true only for a carrier we hold a chart for' do
       expect(described_class.supported?('USPS')).to be(true)
-      expect(described_class.supported?('DHL')).to be(false)
+      expect(described_class.supported?('DHL')).to be(true)
+      expect(described_class.supported?('Nonesuch')).to be(false)
     end
   end
 end
