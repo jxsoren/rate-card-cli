@@ -55,7 +55,7 @@ RSpec.describe RateCard::Runner do
     report(spec_in(@dir), good_client).run
 
     expect(io.string).to include('shipper rate')
-    expect(io.string).to include('┌')
+    expect(io.string).to include('╭')
   end
 
   it 'skips the table when show_table is false but still writes files' do

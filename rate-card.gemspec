@@ -39,7 +39,4 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'bubbles', '~> 0.1'
   spec.add_dependency 'bubbletea', '~> 0.1'
   spec.add_dependency 'lipgloss', '~> 0.2'
-
-  # Still used for the rate tables, which are printed after the TUI exits.
-  spec.add_dependency 'tty-table', '~> 0.12'
 end

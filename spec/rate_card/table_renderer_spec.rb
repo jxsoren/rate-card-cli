@@ -69,8 +69,16 @@ RSpec.describe RateCard::TableRenderer do
     expect(rendered).not_to include('0.00')
   end
 
-  it 'draws a unicode box border' do
-    expect(tables.first[1]).to include('┌')
+  it 'draws the same rounded border the TUI banner uses' do
+    expect(tables.first[1]).to include('╭')
+  end
+
+  it 'right-aligns the cells so the decimal points line up' do
+    # Two rates of different widths land flush against the same column edge.
+    rendered = tables.first[1]
+
+    expect(rendered).to match(/│\s+5\.85 │/)
+    expect(rendered).to match(/│\s+— │/)
   end
 
   describe '#rows' do

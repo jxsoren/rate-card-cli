@@ -1,11 +1,17 @@
 # frozen_string_literal: true
 
-require 'tty-table'
+require 'lipgloss'
+require_relative 'tui/theme'
 
 module RateCard
   # Renders the grid for the terminal: one table per service per rate key, so
   # stdout maps 1:1 to the CSV files. Returns strings rather than printing, so
   # UI owns all output and this stays testable.
+  #
+  # Lipgloss draws these rather than TTY::Table, so the card wears the same
+  # rounded border as the TUI banner instead of looking like a different
+  # program's output. Lipgloss also strips colour by itself when stdout is not a
+  # terminal, so the bold header survives being piped to a file as plain text.
   class TableRenderer
     MISSING = '—'
 
@@ -42,8 +48,25 @@ module RateCard
 
     def render(service, rate_key)
       header = [spec.weight_label, *spec.zones.map { |zone| "Z#{zone}" }]
-      table = TTY::Table.new(header: header, rows: rows(service, rate_key))
-      table.render(:unicode, alignments: [:right] * header.length, padding: [0, 1])
+      body = rows(service, rate_key)
+
+      Lipgloss::Table.new
+                     .headers(header)
+                     .rows(body)
+                     .border(Lipgloss::ROUNDED_BORDER)
+                     .style_func(rows: body.length, columns: header.length) { |row, _column| cell_style(row) }
+                     .render
+    end
+
+    # Everything is right-aligned: these are all numbers, and a rate is only
+    # comparable to the one above it when the decimal points line up. The
+    # header is the one styled row, which is what makes a wide card scannable
+    # once several tables are printed in a row.
+    def cell_style(row)
+      style = Lipgloss::Style.new.align(Lipgloss::RIGHT).padding(0, 1)
+      return style.bold(true).foreground(TUI::Theme::ACCENT) if row == Lipgloss::Table::HEADER_ROW
+
+      style
     end
 
     def format_rate(value)
