@@ -22,9 +22,9 @@ end
 # The files below do not exist yet — each lands in its own later task.
 # Uncomment each line as its task is implemented.
 require_relative 'rate_card/token'
-# require_relative 'rate_card/service'
+require_relative 'rate_card/service'
 # require_relative 'rate_card/failure'
-# require_relative 'rate_card/constants/carriers'
+require_relative 'rate_card/constants/carriers'
 # require_relative 'rate_card/constants/addresses'
 # require_relative 'rate_card/client'
 # require_relative 'rate_card/service_catalog'
