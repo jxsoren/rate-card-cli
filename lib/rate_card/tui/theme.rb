@@ -9,11 +9,11 @@ module RateCard
     # Pastel/TTY pairing this replaced, where only Pastel was gated and the
     # spinner and bar leaked escapes into a pipe.
     module Theme
-      ACCENT  = '39'  # cyan
-      OK      = '42'  # green
-      WARNING = '214' # amber
-      DANGER  = '203' # red
-      MUTED   = '244' # grey
+      ACCENT  = Lipgloss::AdaptiveColor.new(dark: '#00D3FF', light: '#0072B5')
+      OK      = Lipgloss::AdaptiveColor.new(dark: '#2ECC71', light: '#1E8449')
+      WARNING = Lipgloss::AdaptiveColor.new(dark: '#F5A623', light: '#B7791F')
+      DANGER  = Lipgloss::AdaptiveColor.new(dark: '#FF5C5C', light: '#C0392B')
+      MUTED   = Lipgloss::AdaptiveColor.new(dark: '#8A8A8A', light: '#6B6B6B')
 
       CURSOR      = '❯'
       CHECKED     = '◉'
