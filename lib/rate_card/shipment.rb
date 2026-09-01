@@ -40,15 +40,20 @@ module RateCard
     end
 
     def parcel
+      box = dims
       {
         package_type: spec.package_type,
-        length: DIMENSION,
-        width: DIMENSION,
-        height: DIMENSION,
-        weight: spec.weight_in_oz(weight),
+        length: box[:length],
+        width: box[:width],
+        height: box[:height],
+        weight: spec.weight_in_oz_for(weight),
         parcel_items: [parcel_item],
         customs_data: customs_data
       }
+    end
+
+    def dims
+      spec.dims_for(weight) || { length: DIMENSION, width: DIMENSION, height: DIMENSION }
     end
 
     # The parcel as a whole. One item at quantity 1, so this mirrors the item's

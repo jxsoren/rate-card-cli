@@ -76,6 +76,21 @@ RSpec.describe RateCard::Shipment do
     expect(parcel.values_at(:length, :width, :height)).to eq([2, 2, 2])
   end
 
+  it 'uses the row weight and dimension override in cubic mode' do
+    cubic_spec = RateCard::RunSpec.new(
+      token: 'tok', customer_name: 'Acme', customer_id: 1, carrier: 'USPS',
+      services: [RateCard::Service.new(id: 1172, code: 'GA', name: 'GA', carrier: 'USPS')],
+      zones: [1], weight_unit: :oz, weights: [], rate_mode: :cubic, cubic_tiers: [2],
+      package_type: 'parcel', rate_keys: [:shipper_rate], output_base: Pathname.new('/tmp'),
+      show_table: true, started_at: Time.now
+    )
+
+    parcel = described_class.new(spec: cubic_spec, weight: 2, address: address).payload[:shipment][:parcels].first
+
+    expect(parcel[:weight]).to eq(128)
+    expect(parcel.values_at(:length, :width, :height)).to eq([6.0, 6.0, 6.0])
+  end
+
   it 'is JSON-serialisable' do
     expect { JSON.generate(payload) }.not_to raise_error
   end
