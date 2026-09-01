@@ -356,6 +356,17 @@ RSpec.describe RateCard::TUI::App do
         expect(model).not_to be_cancelled
       end
     end
+
+    it 'records the failed count from every ProgressAdvanced message' do
+      model = start
+      answer_happy_path(model)
+
+      model.update(RateCard::TUI::ProgressAdvanced.new(completed: 1, failed: 0))
+      model.update(RateCard::TUI::ProgressAdvanced.new(completed: 2, failed: 1))
+      model.update(RateCard::TUI::ProgressAdvanced.new(completed: 3, failed: 1))
+
+      expect(model.instance_variable_get(:@failure_history)).to eq([0, 1, 1])
+    end
   end
 
   describe 'package types' do

@@ -48,6 +48,7 @@ module RateCard
         @progress = Bubbles::Progress.new(width: 32)
         @completed = 0
         @failed = 0
+        @failure_history = []
         @log = []
       end
 
@@ -363,6 +364,7 @@ module RateCard
       def progress_advanced(message)
         @completed = message.completed
         @failed = message.failed
+        @failure_history << message.failed
       end
 
       def finish(grid)
