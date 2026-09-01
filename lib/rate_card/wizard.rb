@@ -5,15 +5,16 @@ require 'tty-prompt'
 
 module RateCard
   # The prompt flow. Its only product is a validated RunSpec, and it is the only
-  # place that reads user input. It makes exactly one network call — the probe
-  # that discovers which services this customer actually has enabled.
+  # place that reads user input. It makes exactly one network call — the
+  # /services lookup that discovers which services can be offered.
   #
   # Returns nil if the user declines the final confirmation.
   class Wizard
+    # Fallback only. Valid package types are a property of the service
+    # (services[].package_types[].type), so the catalogue is preferred; this
+    # covers a catalogue that reports none.
     PACKAGE_TYPES = %w[parcel flat_rate_envelope flat_rate_box soft_pack].freeze
     DEFAULT_WEIGHT_RANGE = '1-16'
-    PROBE_WEIGHT = 1
-    PROBE_ZONE = 1
 
     # Parses "1-8", "1,3,5" or a mix into a sorted unique Array<Integer>.
     def self.parse_range(input)
@@ -47,7 +48,7 @@ module RateCard
       selected = ask_services(services, carrier)
 
       spec = build_spec(token, identity, carrier, selected)
-      @ui.recap(call_count: spec.call_count)
+      @ui.recap(spec)
       return nil unless @prompt.yes?('Build this rate card?')
 
       spec.validate!
@@ -69,30 +70,18 @@ module RateCard
       end
     end
 
-    # One cheap call at 1 oz to zone 1: its response lists every enabled service.
+    # The service catalogue, not a rate call: it costs nothing and lists services
+    # that would not have quoted at a single probe weight and zone.
     def discover_services(token)
       client = @client_factory.call(token)
-      services = @ui.with_spinner('Probing available services') do
-        probe_spec = probe_spec_for(token)
-        payload = Shipment.new(spec: probe_spec, weight: PROBE_WEIGHT,
-                               address: probe_spec.address_for(PROBE_ZONE)).payload
-        ServiceCatalog.from_response(client.fetch_rates(payload))
+      services = @ui.with_spinner('Loading available services') do
+        ServiceCatalog.from_response(client.fetch_services)
       end
 
       raise NoServices, 'the API returned no services for this token' if services.empty?
 
       @ui.success("#{services.length} services found")
       services
-    end
-
-    # A minimal spec used only to build the probe payload.
-    def probe_spec_for(token)
-      RunSpec.new(
-        token: token, customer_name: 'probe', customer_id: 0, carrier: 'USPS',
-        services: [], zones: [PROBE_ZONE], weight_unit: :oz, weights: [PROBE_WEIGHT],
-        package_type: 'parcel', rate_keys: [:shipper_rate],
-        output_base: @output_base, show_table: false, started_at: Time.now
-      )
     end
 
     def ask_carrier(services)
@@ -114,7 +103,7 @@ module RateCard
       zones = ask_zones(carrier)
       unit = @prompt.select('Weight unit:', %i[oz lbs])
       weights = ask_weights
-      package_type = @prompt.select('Package type:', PACKAGE_TYPES)
+      package_type = ask_package_type(selected)
       rate_keys = ask_rate_keys
 
       RunSpec.new(
@@ -132,6 +121,16 @@ module RateCard
         show_table: true,
         started_at: Time.now
       )
+    end
+
+    # The union of what the selected services accept, so a contract type like
+    # fedex_pak is offered and a type no selected service accepts is not.
+    def ask_package_type(selected)
+      choices = selected.flat_map(&:package_types).uniq.sort
+      choices = PACKAGE_TYPES if choices.empty?
+      return choices.first if choices.length == 1
+
+      @prompt.select('Package type:', choices)
     end
 
     def ask_zones(carrier)

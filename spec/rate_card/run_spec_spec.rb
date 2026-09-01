@@ -29,6 +29,31 @@ RSpec.describe RateCard::RunSpec do
     end
   end
 
+  describe '.compact_range' do
+    it 'collapses runs of three or more' do
+      expect(described_class.compact_range([1, 2, 3, 4, 5, 6, 7, 8])).to eq('1-8')
+    end
+
+    it 'leaves a pair listed, since 4-5 is no shorter than 4,5' do
+      expect(described_class.compact_range([4, 5])).to eq('4,5')
+    end
+
+    it 'mixes runs and singletons, sorted and deduplicated' do
+      expect(described_class.compact_range([5, 1, 2, 3, 5, 9])).to eq('1-3,5,9')
+    end
+  end
+
+  describe '#zone_summary / #weight_summary / #service_names / #rate_key_labels' do
+    it 'describes the run for the pre-confirm recap' do
+      spec = build(zones: [1, 2, 3, 7], weights: [1, 2, 3, 4], weight_unit: :lbs)
+
+      expect(spec.zone_summary).to eq('1-3,7')
+      expect(spec.weight_summary).to eq('1-4 lbs')
+      expect(spec.service_names).to eq(['USPS Ground Advantage'])
+      expect(spec.rate_key_labels).to eq(['shipper rate', 'meter rate'])
+    end
+  end
+
   describe '#call_count' do
     it 'is weights times zones, independent of how many services are selected' do
       one_service = build

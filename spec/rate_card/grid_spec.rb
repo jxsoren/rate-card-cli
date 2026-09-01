@@ -181,4 +181,69 @@ RSpec.describe RateCard::Grid do
 
     expect(grid.failures.map { |f| [f.weight, f.zone] }).to eq([[1, 1], [1, 2], [2, 1], [2, 2]])
   end
+  describe 'warnings' do
+    # The docs are explicit that a carrier failure comes back as a 201 with a
+    # populated warnings array, so a run can succeed and price nothing.
+    it 'collects the response warnings array' do
+      client = FakeClient.new do |_weight, _postal|
+        { 'service_rates' => [], 'warnings' => ['FedEx returned error: Destination postal code missing or invalid'] }
+      end
+
+      grid = described_class.build(spec: spec_with(services: [ground], zones: [1], weights: [1]),
+                                   client: client)
+
+      expect(grid.warnings.map(&:message))
+        .to eq(['FedEx returned error: Destination postal code missing or invalid'])
+    end
+
+    it 'counts a warning repeated across calls once, with its occurrence count' do
+      client = FakeClient.new { |_w, _p| { 'service_rates' => [], 'warnings' => ['carrier down'] } }
+
+      grid = described_class.build(spec: spec_with(services: [ground]), client: client)
+
+      expect(grid.warnings.map { |w| [w.message, w.count] }).to eq([['carrier down', 4]])
+    end
+
+    it 'reports the per-service errors field, so a blank cell is explained' do
+      client = FakeClient.new do |_weight, _postal|
+        { 'service_rates' => [
+          { 'service_id' => 1172, 'rate' => nil, 'errors' => 'Weight exceeds maximum' }
+        ] }
+      end
+
+      grid = described_class.build(spec: spec_with(services: [ground], zones: [1], weights: [1]),
+                                   client: client)
+
+      expect(grid.warnings.map(&:message)).to eq(['GA (1172): Weight exceeds maximum'])
+    end
+
+    it 'ignores the errors field of a service that was not selected' do
+      client = FakeClient.new do |_weight, _postal|
+        { 'service_rates' => [{ 'service_id' => 684, 'errors' => 'not selected' }] }
+      end
+
+      grid = described_class.build(spec: spec_with(services: [ground], zones: [1], weights: [1]),
+                                   client: client)
+
+      expect(grid.warnings).to be_empty
+    end
+
+    it 'joins an errors array into one message' do
+      client = FakeClient.new do |_weight, _postal|
+        { 'service_rates' => [{ 'service_id' => 1172, 'errors' => ['too heavy', 'bad zip'] }] }
+      end
+
+      grid = described_class.build(spec: spec_with(services: [ground], zones: [1], weights: [1]),
+                                   client: client)
+
+      expect(grid.warnings.map(&:message)).to eq(['GA (1172): too heavy; bad zip'])
+    end
+
+    it 'has no warnings when every service rated cleanly' do
+      grid = described_class.build(spec: spec_with(services: [ground]),
+                                   client: FakeClient.new(&both_services_responder))
+
+      expect(grid.warnings).to be_empty
+    end
+  end
 end

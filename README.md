@@ -88,6 +88,10 @@ Two distinct no-output cases, which the tool does not conflate:
 - **Calls succeeded but nothing was priced** → your service, package type or weight range.
   USPS First Class is not quoted above 13 oz, for instance.
 
+A carrier failure is not a failed call: eHub answers 201 and puts the reason in the response
+`warnings` array, or in a service's `errors` field. Both are reported under
+*the API reported N warnings*, deduplicated with an occurrence count.
+
 ## Tests
 
 ```bash
@@ -126,6 +130,6 @@ a real address and a carrier's zone chart, so it is never derived at runtime.
 ## Not done
 
 `spec/fixtures/rates_response.json` was never captured, so no test pins the production response
-field names (`service_rates`, `service_id`, `rate`, `meter_rate`). If eHub renames one, the tool
+field names (`service_rates`, `service_id`, `rate`, `meter_rate`, `errors`). If eHub renames one, the tool
 will produce empty cells rather than failing loudly. Capturing one real response would close
 that gap — see Task 16 of `docs/superpowers/plans/2026-08-31-rate-card-cli.md`.

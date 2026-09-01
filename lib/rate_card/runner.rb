@@ -18,6 +18,7 @@ module RateCard
 
       @ui.print_tables(TableRenderer.new(grid: grid, spec: spec).tables) if spec.show_table
       @ui.failure_report(grid.failures)
+      @ui.warning_report(grid.warnings)
 
       if grid.all_failed?
         @ui.error('every rate call failed — no files written')

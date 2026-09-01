@@ -13,7 +13,7 @@ RSpec.describe RateCard::UI do
 
       expect(io.string).to include('eHub Rate Card Builder')
       expect(io.string).to include('production')
-      expect(io.string).to include('api.essentialhub.com')
+      expect(io.string).to include('api.ehub.com')
     end
   end
 
@@ -43,11 +43,35 @@ RSpec.describe RateCard::UI do
   end
 
   describe '#recap' do
+    let(:spec) do
+      instance_double(
+        RateCard::RunSpec,
+        carrier: 'usps',
+        service_names: ['Ground Advantage', 'Priority Mail'],
+        zone_summary: '1-8',
+        weight_summary: '1-16 oz',
+        package_type: 'parcel',
+        rate_key_labels: ['shipper rate', 'meter rate'],
+        call_count: 128
+      )
+    end
+
     it 'states the call count so the user knows the production cost before confirming' do
-      ui.recap(call_count: 128)
+      ui.recap(spec)
 
       expect(io.string).to include('128')
       expect(io.string).to include('rate calls')
+    end
+
+    it 'repeats every answer back, so the confirm is not made on a bare number' do
+      ui.recap(spec)
+
+      expect(io.string).to include('usps')
+      expect(io.string).to include('Ground Advantage', 'Priority Mail')
+      expect(io.string).to include('1-8')
+      expect(io.string).to include('1-16 oz')
+      expect(io.string).to include('parcel')
+      expect(io.string).to include('shipper rate', 'meter rate')
     end
   end
 
@@ -89,6 +113,36 @@ RSpec.describe RateCard::UI do
       ui.failure_report(failures)
 
       expect(io.string).to include('15 cells failed')
+      expect(io.string).to include('5 more')
+    end
+  end
+
+  describe '#warning_report' do
+    it 'prints nothing when the API reported no warnings' do
+      ui.warning_report([])
+
+      expect(io.string).to eq('')
+    end
+
+    it 'prints each warning the API returned' do
+      ui.warning_report([RateCard::Warning.new(message: 'FedEx returned error: bad zip', count: 1)])
+
+      expect(io.string).to include('the API reported 1 warning')
+      expect(io.string).to include('FedEx returned error: bad zip')
+    end
+
+    it 'shows how many calls repeated the same warning' do
+      ui.warning_report([RateCard::Warning.new(message: 'carrier down', count: 12)])
+
+      expect(io.string).to include('carrier down')
+      expect(io.string).to include('×12')
+    end
+
+    it 'collapses a long warning list to a summary after ten entries' do
+      warnings = (1..15).map { |i| RateCard::Warning.new(message: "w#{i}", count: 1) }
+      ui.warning_report(warnings)
+
+      expect(io.string).to include('15 warnings')
       expect(io.string).to include('5 more')
     end
   end

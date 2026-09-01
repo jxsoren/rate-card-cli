@@ -1,16 +1,15 @@
 # frozen_string_literal: true
 
 module RateCard
-  # Turns a rate response's service_rates array into the list of services this
-  # customer actually has enabled. Used on the probe call so the wizard never
-  # offers a service the customer does not have, and never relies on a
-  # hardcoded service id that has since drifted.
+  # Turns the /services response into the list of services the wizard can offer.
+  # Read live rather than from a hardcoded list so a service id that has drifted
+  # cannot silently produce a card of blank cells.
   module ServiceCatalog
     module_function
 
     # Returns Array<Service>, de-duplicated and sorted for display.
     def from_response(body)
-      entries = body.is_a?(Hash) ? (body['service_rates'] || []) : []
+      entries = body.is_a?(Hash) ? (body['services'] || []) : []
 
       services = entries.filter_map { |entry| build_service(entry) }.uniq(&:id)
       sort_for_display(services)
@@ -35,8 +34,20 @@ module RateCard
         id: id.to_i,
         code: code,
         name: name,
-        carrier: entry['carrier'] || Constants::Carriers.for_service_id(id)
+        carrier: Constants::Carriers.for_carrier_code(entry['carrier_code']),
+        package_types: package_types(entry)
       )
+    end
+
+    # services[].package_types is an array of {type, name}; only the type is
+    # sent back in a rate request.
+    def package_types(entry)
+      Array(entry['package_types']).filter_map do |package_type|
+        next package_type.to_s unless package_type.is_a?(Hash)
+
+        type = package_type['type'].to_s
+        type.empty? ? nil : type
+      end.uniq
     end
 
     def sort_for_display(services)

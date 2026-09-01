@@ -7,7 +7,7 @@ RSpec.describe RateCard::Client do
   def client_replaying(*responses, sleeps: [])
     calls = responses.dup
     stubs = Faraday::Adapter::Test::Stubs.new do |stub|
-      stub.post('/api/v2/rates/') do
+      stub.post('/api/v2/rates') do
         status, body = calls.shift
         [status, { 'Content-Type' => 'application/json' }, JSON.generate(body)]
       end
@@ -17,6 +17,12 @@ RSpec.describe RateCard::Client do
 
   it 'returns the parsed body on success' do
     client = client_replaying([200, { 'service_rates' => [{ 'service_id' => 1 }] }])
+
+    expect(client.fetch_rates({ shipment: {} })).to eq('service_rates' => [{ 'service_id' => 1 }])
+  end
+
+  it 'treats the 201 the rate endpoint actually returns as success' do
+    client = client_replaying([201, { 'service_rates' => [{ 'service_id' => 1 }] }])
 
     expect(client.fetch_rates({ shipment: {} })).to eq('service_rates' => [{ 'service_id' => 1 }])
   end
@@ -59,9 +65,46 @@ RSpec.describe RateCard::Client do
     expect(sleeps).to be_empty
   end
 
+  describe '#fetch_services' do
+    it 'GETs the shipping catalogue and returns the parsed body' do
+      captured = nil
+      stubs = Faraday::Adapter::Test::Stubs.new do |stub|
+        stub.get('/api/v2/services') do |env|
+          captured = env
+          [200, { 'Content-Type' => 'application/json' },
+           JSON.generate('services' => [{ 'service_id' => 1172 }])]
+        end
+      end
+      client = described_class.new(token: 'secret-jwt', stubs: stubs)
+
+      expect(client.fetch_services).to eq('services' => [{ 'service_id' => 1172 }])
+      expect(captured.params).to eq('category' => 'shipping')
+      expect(captured.request_headers['Authorization']).to eq('Bearer secret-jwt')
+    end
+
+    it 'raises Unauthorized on 403 so discovery fails loudly rather than empty' do
+      stubs = Faraday::Adapter::Test::Stubs.new do |stub|
+        stub.get('/api/v2/services') { [403, {}, '{}'] }
+      end
+      client = described_class.new(token: 'tok', stubs: stubs, sleeper: ->(_) {})
+
+      expect { client.fetch_services }.to raise_error(RateCard::Unauthorized)
+    end
+
+    it 'reports the status when the service list call fails' do
+      stubs = Faraday::Adapter::Test::Stubs.new do |stub|
+        stub.get('/api/v2/services') { [422, {}, '{}'] }
+      end
+      client = described_class.new(token: 'tok', stubs: stubs, sleeper: ->(_) {})
+
+      expect { client.fetch_services }
+        .to raise_error(RateCard::RequestFailed, /service list call failed with HTTP 422/)
+    end
+  end
+
   it 'raises RequestFailed when the connection itself fails' do
     stubs = Faraday::Adapter::Test::Stubs.new do |stub|
-      stub.post('/api/v2/rates/') { raise Faraday::ConnectionFailed, 'boom' }
+      stub.post('/api/v2/rates') { raise Faraday::ConnectionFailed, 'boom' }
     end
     client = described_class.new(token: 'tok', stubs: stubs, sleeper: ->(_) {})
 
@@ -71,7 +114,7 @@ RSpec.describe RateCard::Client do
   it 'sends the bearer token and a json body' do
     captured = nil
     stubs = Faraday::Adapter::Test::Stubs.new do |stub|
-      stub.post('/api/v2/rates/') do |env|
+      stub.post('/api/v2/rates') do |env|
         captured = env
         [200, { 'Content-Type' => 'application/json' }, '{}']
       end
@@ -82,5 +125,23 @@ RSpec.describe RateCard::Client do
     # request_body, not body: Faraday's Env#body aliases to response_body once a
     # status is set, so reading .body after the call returns the response.
     expect(JSON.parse(captured.request_body)).to eq('shipment' => { 'a' => 1 })
+  end
+  # The documented endpoint is POST /api/v2/rates with no trailing slash. A
+  # trailing slash relies on a redirect, and a redirected POST can lose its body.
+  it 'posts to the documented path, without a trailing slash' do
+    path = nil
+    stubs = Faraday::Adapter::Test::Stubs.new do |stub|
+      stub.post('/api/v2/rates') do |env|
+        path = env.url.path
+        [201, { 'Content-Type' => 'application/json' }, '{}']
+      end
+    end
+    described_class.new(token: 'tok', stubs: stubs).fetch_rates({ shipment: {} })
+
+    expect(path).to eq('/api/v2/rates')
+  end
+
+  it 'uses the documented api.ehub.com host' do
+    expect(described_class::BASE_URL).to eq('https://api.ehub.com')
   end
 end

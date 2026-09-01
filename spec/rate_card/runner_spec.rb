@@ -104,4 +104,27 @@ RSpec.describe RateCard::Runner do
       .to raise_error(RateCard::OutputNotWritable)
     expect(client.payloads).to be_empty
   end
+  # The docs: a carrier failure comes back as a 201 with a populated warnings
+  # array. Without reporting it, the user gets blank cells and no reason.
+  it 'reports the API warnings from a call that otherwise succeeded' do
+    client = FakeClient.new do |weight, _postal|
+      { 'service_rates' => [{ 'service_id' => 1172, 'rate' => weight * 1.0 }],
+        'warnings' => ['FedEx returned error: Destination postal code missing or invalid'] }
+    end
+
+    described_class.new(spec: spec_in(@dir), client: client, ui: ui).run
+
+    expect(io.string).to include('Destination postal code missing or invalid')
+  end
+
+  it 'explains a card of blank cells with the warnings that came back with it' do
+    client = FakeClient.new do |_weight, _postal|
+      { 'service_rates' => [], 'warnings' => ['USPS returned error: service not enabled'] }
+    end
+
+    code = described_class.new(spec: spec_in(@dir), client: client, ui: ui).run
+
+    expect(code).to eq(1)
+    expect(io.string).to include('service not enabled')
+  end
 end

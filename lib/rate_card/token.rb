@@ -14,25 +14,18 @@ module RateCard
 
     module_function
 
-    # Returns { name: String, customer_id: Integer, email: String|nil }.
-    #
-    # Real eHub tokens carry no customer_name, so the display name is normally
-    # the account email — it tells the user which account they are about to bill
-    # far better than a bare numeric id. The placeholder is a last resort.
     def decode(raw)
       payload = payload_from(raw)
       user = payload.dig('data', 'user') || {}
 
-      customer_id = user['customer_id']
-      raise DecodeError, 'token payload has no customer_id' unless customer_id.is_a?(Integer)
-
+      customer_id = user['customer_id'] if user['customer_id'].is_a?(Integer)
       email = presence(user['email'])
-      name = presence(user['customer_name']) || email || "customer #{customer_id}"
+      # FIXME - I don't even think we need a name field here tbh
+      name = email || (customer_id ? "customer #{customer_id}" : 'unknown customer')
 
       { name: name, customer_id: customer_id, email: email }
     end
 
-    # nil for anything blank, so a whitespace-only claim never becomes a name.
     def presence(value)
       string = value.to_s.strip
       string.empty? ? nil : string
@@ -48,8 +41,8 @@ module RateCard
       raise DecodeError, 'token payload is not a JSON object' unless parsed.is_a?(Hash)
 
       parsed
-    rescue ArgumentError, JSON::ParserError => e
-      raise DecodeError, "token payload could not be decoded: #{e.message}"
+    rescue ArgumentError, JSON::ParserError
+      raise DecodeError, 'this does not look like an eHub API token — please try again'
     end
   end
 end

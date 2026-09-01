@@ -33,8 +33,17 @@ RSpec.describe RateCard::Shipment do
     expect(payload[:shipment][:to_location]).to include(postal_code: '84094', city: 'South Jordan')
   end
 
-  it 'requests basic address validation so a curated address is not rejected' do
-    expect(payload[:shipment][:to_location][:validation_level]).to eq('basic')
+  # validation_level is not in the documented to_location schema; only the
+  # documented fields are sent.
+  it 'sends only documented to_location fields' do
+    expect(payload[:shipment][:to_location]).not_to have_key(:validation_level)
+  end
+
+  it 'sends a parcel-level customs declaration, which the docs require for international' do
+    customs = payload[:shipment][:parcels].first[:customs_data]
+
+    expect(customs[:content_type]).to eq('merchandise')
+    expect(customs[:value]).to eq(RateCard::Shipment::ITEM_VALUE)
   end
 
   it 'sends exactly one parcel with the selected package type' do

@@ -7,34 +7,34 @@ require 'tty-prompt'
 require 'tty/prompt/test' # not autoloaded by tty-prompt; TTY::Prompt::Test needs it
 
 RSpec.describe RateCard::Wizard do
-  def jwt_for(customer_id, name)
+  def jwt_for(customer_id, email)
     encode = ->(h) { Base64.urlsafe_encode64(JSON.generate(h), padding: false) }
     "#{encode.call({ alg: 'none' })}." \
-      "#{encode.call({ data: { user: { customer_id: customer_id, customer_name: name } } })}.sig"
+      "#{encode.call({ data: { user: { customer_id: customer_id, email: email } } })}.sig"
   end
 
-  let(:token) { jwt_for(1042, 'Acme Fulfillment') }
+  let(:token) { jwt_for(1042, 'ops@acme.test') }
 
-  let(:probe_body) do
-    { 'service_rates' => [
+  let(:catalog_body) do
+    { 'services' => [
       { 'service_id' => 1172, 'service_code' => 'GroundAdvantage',
-        'service' => 'USPS Ground Advantage', 'rate' => 5.85, 'meter_rate' => 6.9 },
+        'service' => 'USPS Ground Advantage', 'carrier_code' => 'usps' },
       { 'service_id' => 392, 'service_code' => 'FEDEX_GROUND',
-        'service' => 'FedEx Ground', 'rate' => 9.1, 'meter_rate' => 11.0 }
+        'service' => 'FedEx Ground', 'carrier_code' => 'fedex' }
     ] }
   end
 
   let(:io) { StringIO.new }
   let(:ui) { RateCard::UI.new(io: StringIO.new) }
   let(:prompt) { TTY::Prompt::Test.new }
-  let(:probe_client) { FakeClient.new { |_w, _p| probe_body } }
+  let(:catalog_client) { FakeClient.new(services: catalog_body) }
 
   def wizard(output_base: Pathname.new('/tmp/rc'))
     described_class.new(
       prompt: prompt,
       ui: ui,
       output_base: output_base,
-      client_factory: ->(_token) { probe_client }
+      client_factory: ->(_token) { catalog_client }
     )
   end
 
@@ -68,7 +68,7 @@ RSpec.describe RateCard::Wizard do
     spec = wizard.run
 
     expect(spec.token).to eq(token)
-    expect(spec.customer_name).to eq('Acme Fulfillment')
+    expect(spec.customer_name).to eq('ops@acme.test')
     expect(spec.customer_id).to eq(1042)
   end
 
@@ -111,7 +111,7 @@ RSpec.describe RateCard::Wizard do
   end
 
   it 'raises NoServices when the probe finds nothing' do
-    empty_client = FakeClient.new { |_w, _p| { 'service_rates' => [] } }
+    empty_client = FakeClient.new(services: { 'services' => [] })
     prompt.input << "#{token}\n"
     prompt.input.rewind
 
@@ -122,7 +122,7 @@ RSpec.describe RateCard::Wizard do
   end
 
   it 'lets Unauthorized from the probe propagate' do
-    bad_client = FakeClient.new { |_w, _p| RateCard::Unauthorized.new('rejected') }
+    bad_client = FakeClient.new(services: RateCard::Unauthorized.new('rejected'))
     prompt.input << "#{token}\n"
     prompt.input.rewind
 
@@ -192,5 +192,24 @@ RSpec.describe RateCard::Wizard do
     it 'ignores a reversed range rather than looping forever' do
       expect(described_class.parse_range('8-1')).to eq([])
     end
+  end
+  # Valid package types are per-service (services[].package_types[].type), so a
+  # contract-specific type like fedex_pak has to come from the catalogue, not a
+  # hardcoded list.
+  it 'offers the package types the selected service reports' do
+    catalog_body['services'][0]['package_types'] = [{ 'type' => 'fedex_pak', 'name' => 'Pak' }]
+    answer_happy_path
+
+    spec = wizard.run
+
+    expect(spec.package_type).to eq('fedex_pak')
+  end
+
+  it 'falls back to the built-in package types when the catalogue lists none' do
+    answer_happy_path
+
+    spec = wizard.run
+
+    expect(spec.package_type).to eq(RateCard::Wizard::PACKAGE_TYPES.first)
   end
 end

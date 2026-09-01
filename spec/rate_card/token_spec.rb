@@ -20,15 +20,15 @@ RSpec.describe RateCard::Token do
         .to eq(name: 'someone@example.com', customer_id: 1_042, email: 'someone@example.com')
     end
 
-    it 'prefers customer_name over the email when a token carries one' do
+    it 'names the account by email even when the token also carries a customer_name' do
       token = jwt_for({ data: { user: { customer_id: 1042, customer_name: 'Acme Fulfillment',
                                         email: 'ops@acme.test' } } })
 
       expect(described_class.decode(token))
-        .to eq(name: 'Acme Fulfillment', customer_id: 1042, email: 'ops@acme.test')
+        .to eq(name: 'ops@acme.test', customer_id: 1042, email: 'ops@acme.test')
     end
 
-    it 'falls back to a placeholder only when there is neither a name nor an email' do
+    it 'falls back to the customer id when there is no email' do
       token = jwt_for({ data: { user: { customer_id: 1042 } } })
 
       expect(described_class.decode(token))
@@ -73,11 +73,11 @@ RSpec.describe RateCard::Token do
         .to raise_error(RateCard::Token::DecodeError, /not a JSON object/)
     end
 
-    it 'raises DecodeError when the payload is a Hash with no data.user nesting' do
+    it 'decodes a Hash with no data.user nesting rather than raising' do
       token = "header.#{Base64.urlsafe_encode64(JSON.generate({ foo: 'bar' }), padding: false)}.sig"
 
-      expect { described_class.decode(token) }
-        .to raise_error(RateCard::Token::DecodeError, /no customer_id/)
+      expect(described_class.decode(token))
+        .to eq(name: 'unknown customer', customer_id: nil, email: nil)
     end
 
     it 'raises when the token does not have three segments' do
@@ -87,14 +87,14 @@ RSpec.describe RateCard::Token do
 
     it 'raises when the payload segment is not valid base64 json' do
       expect { described_class.decode('header.@@@@.signature') }
-        .to raise_error(RateCard::Token::DecodeError, /could not be decoded/)
+        .to raise_error(RateCard::Token::DecodeError, /does not look like an eHub API token/)
     end
 
-    it 'raises when the payload has no customer_id' do
-      token = jwt_for({ data: { user: {} } })
+    it 'still decodes when the payload has no customer_id, naming the account by email' do
+      token = jwt_for({ data: { user: { email: 'ops@acme.test' } } })
 
-      expect { described_class.decode(token) }
-        .to raise_error(RateCard::Token::DecodeError, /no customer_id/)
+      expect(described_class.decode(token))
+        .to eq(name: 'ops@acme.test', customer_id: nil, email: 'ops@acme.test')
     end
 
     it 'raises on a nil or empty token' do

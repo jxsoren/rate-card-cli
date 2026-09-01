@@ -23,6 +23,7 @@ module RateCard
       @spec = spec
       @cells = {}
       @failures = []
+      @warnings = Hash.new(0)
       @succeeded = 0
       @mutex = Mutex.new
     end
@@ -33,6 +34,15 @@ module RateCard
 
     def failures
       @failures.sort_by { |f| [f.weight, f.zone] }
+    end
+
+    # What the API said went wrong on calls that otherwise succeeded: the
+    # response-level `warnings` array and the per-service `errors` field. Both
+    # arrive with an HTTP 201, so without this a carrier outage would show up as
+    # a card of blank cells with nothing to explain them.
+    def warnings
+      @warnings.map { |message, count| Warning.new(message: message, count: count) }
+               .sort_by { |warning| [-warning.count, warning.message] }
     end
 
     # True only when no call got through. Deliberately NOT "no cell has a
@@ -80,6 +90,8 @@ module RateCard
       by_id = index_by_service_id(body)
 
       @mutex.synchronize do
+        record_warnings(body, by_id)
+
         spec.services.each do |service|
           entry = by_id[service.id]
           spec.rate_keys.each do |rate_key|
@@ -88,6 +100,33 @@ module RateCard
           end
         end
       end
+    end
+
+    # Caller holds @mutex.
+    def record_warnings(body, by_id)
+      response_warnings(body).each { |message| @warnings[message] += 1 }
+
+      spec.services.each do |service|
+        detail = error_detail(by_id[service.id])
+        next if detail.nil?
+
+        @warnings["#{service.name} (#{service.id}): #{detail}"] += 1
+      end
+    end
+
+    def response_warnings(body)
+      return [] unless body.is_a?(Hash)
+
+      Array(body['warnings']).map(&:to_s).reject { |message| message.strip.empty? }
+    end
+
+    # `errors` is documented as populated when a service could not be rated. It
+    # comes back as a string, but an array is accepted so a list of carrier
+    # messages reads as one line instead of raising.
+    def error_detail(entry)
+      raw = entry && entry['errors']
+      detail = Array(raw).map(&:to_s).reject { |message| message.strip.empty? }.join('; ')
+      detail.empty? ? nil : detail
     end
 
     def index_by_service_id(body)

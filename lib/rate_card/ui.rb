@@ -10,6 +10,7 @@ module RateCard
   # colour codes and specs can assert against a StringIO.
   class UI
     MAX_LISTED_FAILURES = 10
+    MAX_LISTED_WARNINGS = 10
 
     def initialize(io: $stdout)
       @io = io
@@ -20,7 +21,7 @@ module RateCard
       @io.puts
       @io.puts TTY::Box.frame(
         'eHub Rate Card Builder',
-        "#{@pastel.red('●')} production · api.essentialhub.com",
+        "#{@pastel.red('●')} production · api.ehub.com",
         padding: [0, 1],
         border: :thick
       )
@@ -51,9 +52,16 @@ module RateCard
       @io.puts
     end
 
-    def recap(call_count:)
+    # The last thing shown before the confirm, so it repeats every answer back:
+    # eight prompts earlier the user cannot otherwise check what they chose, and
+    # the alternative is confirming a slow production run on a bare number.
+    def recap(spec)
       @io.puts
-      @io.puts "  #{@pastel.bold(call_count.to_s)} rate calls against production"
+      @io.puts "  #{@pastel.bold(spec.carrier)} · #{spec.service_names.join(', ')}"
+      @io.puts "  zones #{spec.zone_summary} · weights #{spec.weight_summary} · " \
+               "#{spec.package_type}"
+      @io.puts "  columns: #{spec.rate_key_labels.join(', ')}"
+      @io.puts "  #{@pastel.bold(spec.call_count.to_s)} rate calls against production"
     end
 
     # Wraps a slow step with a spinner, returning the block's value.
@@ -72,7 +80,7 @@ module RateCard
     # Yields a callable that advances the bar once per completed call.
     def with_progress(total)
       bar = TTY::ProgressBar.new(
-        "  fetching [:bar] :current/:total",
+        '  fetching [:bar] :current/:total · :elapsed elapsed',
         total: total, output: @io, bar_format: :block
       )
       # ensure, not a plain call after yield: a rejected token aborts the fetch
@@ -99,6 +107,23 @@ module RateCard
         @io.puts "      wt #{failure.weight}  Z#{failure.zone}  → #{failure.message}"
       end
       remaining = failures.length - MAX_LISTED_FAILURES
+      @io.puts "      … and #{remaining} more" if remaining.positive?
+    end
+
+    # What the API itself reported on calls that succeeded. Separate from
+    # #failure_report: those cells have no answer, these have an answer that
+    # says why there is no rate.
+    def warning_report(warnings)
+      return if warnings.empty?
+
+      @io.puts
+      noun = warnings.length == 1 ? 'warning' : 'warnings'
+      warn "the API reported #{warnings.length} #{noun}"
+      warnings.first(MAX_LISTED_WARNINGS).each do |warning|
+        repeat = warning.count > 1 ? " (×#{warning.count})" : ''
+        @io.puts "      #{warning.message}#{repeat}"
+      end
+      remaining = warnings.length - MAX_LISTED_WARNINGS
       @io.puts "      … and #{remaining} more" if remaining.positive?
     end
 

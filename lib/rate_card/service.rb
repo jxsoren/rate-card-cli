@@ -2,7 +2,14 @@
 
 module RateCard
   # One shipping service the customer has enabled, as discovered from a probe call.
-  Service = Struct.new(:id, :code, :name, :carrier, keyword_init: true) do
+  Service = Struct.new(:id, :code, :name, :carrier, :package_types, keyword_init: true) do
+    # The package types this service accepts, from services[].package_types.
+    # Always an array: callers offer these as choices, and a nil would have to
+    # be guarded at every one of them.
+    def package_types
+      Array(self[:package_types])
+    end
+
     # What the wizard checkbox shows.
     def label
       "#{name} (#{id})"

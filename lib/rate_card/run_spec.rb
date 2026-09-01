@@ -32,6 +32,30 @@ module RateCard
       weights.length * zones.length
     end
 
+    def service_names
+      services.map(&:name)
+    end
+
+    def rate_key_labels
+      rate_keys.map { |key| rate_key_label(key) }
+    end
+
+    def zone_summary
+      self.class.compact_range(zones)
+    end
+
+    def weight_summary
+      "#{self.class.compact_range(weights)} #{weight_unit}"
+    end
+
+    # [1,2,3,5] => "1-3,5". Runs of three or more collapse; a pair stays listed,
+    # since "4,5" is no longer than "4-5" and reads as what the user typed.
+    def self.compact_range(numbers)
+      sorted = numbers.to_a.sort.uniq
+      runs = sorted.slice_when { |a, b| b != a + 1 }.to_a
+      runs.map { |run| run.length >= 3 ? "#{run.first}-#{run.last}" : run.join(',') }.join(',')
+    end
+
     # The API always takes ounces; the chosen unit is an input concern only.
     def weight_in_oz(weight)
       weight_unit == :lbs ? weight * 16 : weight

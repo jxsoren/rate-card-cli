@@ -2,29 +2,30 @@
 
 module RateCard
   module Constants
-    # Maps known eHub service ids to a carrier name, so the wizard can group the
-    # live-discovered service list. Ids sourced from
-    # ../rate_table_builder/constants/service_constants.rb. An unknown id is
-    # grouped under 'Other' rather than dropped — the customer really does have
-    # it enabled, we just do not recognise it.
+    # Turns the carrier_code that /services reports into the display name the
+    # wizard groups by.
     module Carriers
       OTHER = 'Other'
 
-      SERVICE_CARRIERS = {
-        # USPS
-        683 => 'USPS', 684 => 'USPS', 689 => 'USPS', 690 => 'USPS',
-        691 => 'USPS', 692 => 'USPS', 1172 => 'USPS',
-        # FedEx
-        392 => 'FedEx', 393 => 'FedEx', 394 => 'FedEx',
-        395 => 'FedEx', 396 => 'FedEx', 398 => 'FedEx'
-      }.freeze
-
       DISPLAY_ORDER = ['USPS', 'UPS', 'FedEx', 'DHL', 'Amazon', OTHER].freeze
+
+      # Every /services entry carries a lowercase carrier_code. Anything not
+      # listed here keeps its own code, upcased: an unrecognised carrier is
+      # still better named by itself than lumped into 'Other'.
+      CARRIER_CODES = {
+        'usps' => 'USPS', 'ups' => 'UPS', 'fedex' => 'FedEx',
+        'dhl' => 'DHL', 'amazon' => 'Amazon'
+      }.freeze
 
       module_function
 
-      def for_service_id(id)
-        SERVICE_CARRIERS.fetch(id.to_i, OTHER)
+      # OTHER is only for a malformed entry with no code at all, so a service is
+      # still offered rather than dropped or left with a nil carrier.
+      def for_carrier_code(code)
+        key = code.to_s.strip.downcase
+        return OTHER if key.empty?
+
+        CARRIER_CODES.fetch(key) { key.upcase }
       end
 
       def display_order
