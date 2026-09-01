@@ -4,3 +4,4 @@ output/
 vendor/bundle
 *.gem
 .DS_Store
+.idea/
