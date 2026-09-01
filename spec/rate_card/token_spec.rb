@@ -10,23 +10,57 @@ RSpec.describe RateCard::Token do
   end
 
   describe '.decode' do
-    it 'returns the customer name and id from the nested payload' do
-      token = jwt_for({ data: { user: { customer_id: 1042, customer_name: 'Acme Fulfillment' } } })
+    it 'reads a real production payload, naming the account by its email' do
+      token = jwt_for({ iat: 1_731_106_860,
+                        data: { user: { id: 18_633, customer_id: 1_042,
+                                        email: 'someone@example.com' },
+                                scopes: ['api_public'] } })
 
-      expect(described_class.decode(token)).to eq(name: 'Acme Fulfillment', customer_id: 1042)
+      expect(described_class.decode(token))
+        .to eq(name: 'someone@example.com', customer_id: 1_042, email: 'someone@example.com')
     end
 
-    it 'falls back to a placeholder name when the payload has no customer_name' do
+    it 'prefers customer_name over the email when a token carries one' do
+      token = jwt_for({ data: { user: { customer_id: 1042, customer_name: 'Acme Fulfillment',
+                                        email: 'ops@acme.test' } } })
+
+      expect(described_class.decode(token))
+        .to eq(name: 'Acme Fulfillment', customer_id: 1042, email: 'ops@acme.test')
+    end
+
+    it 'falls back to a placeholder only when there is neither a name nor an email' do
       token = jwt_for({ data: { user: { customer_id: 1042 } } })
 
-      expect(described_class.decode(token)).to eq(name: 'customer 1042', customer_id: 1042)
+      expect(described_class.decode(token))
+        .to eq(name: 'customer 1042', customer_id: 1042, email: nil)
     end
 
-    it 'decodes a payload whose base64 needs padding restored' do
-      # A payload sized so its base64 length is not a multiple of 4.
-      token = jwt_for({ data: { user: { customer_id: 7, customer_name: 'A' } } })
+    it 'treats a blank email as absent rather than naming the account empty' do
+      token = jwt_for({ data: { user: { customer_id: 1042, email: '   ' } } })
 
-      expect(described_class.decode(token)[:customer_id]).to eq(7)
+      expect(described_class.decode(token))
+        .to eq(name: 'customer 1042', customer_id: 1042, email: nil)
+    end
+
+    it 'raises DecodeError, not TypeError, when the payload is a JSON array' do
+      token = "header.#{Base64.urlsafe_encode64(JSON.generate([1, 2, 3]), padding: false)}.sig"
+
+      expect { described_class.decode(token) }
+        .to raise_error(RateCard::Token::DecodeError, /not a JSON object/)
+    end
+
+    it 'raises DecodeError when the payload is a bare JSON scalar' do
+      token = "header.#{Base64.urlsafe_encode64('7', padding: false)}.sig"
+
+      expect { described_class.decode(token) }
+        .to raise_error(RateCard::Token::DecodeError, /not a JSON object/)
+    end
+
+    it 'raises DecodeError when the payload is a Hash with no data.user nesting' do
+      token = "header.#{Base64.urlsafe_encode64(JSON.generate({ foo: 'bar' }), padding: false)}.sig"
+
+      expect { described_class.decode(token) }
+        .to raise_error(RateCard::Token::DecodeError, /no customer_id/)
     end
 
     it 'raises when the token does not have three segments' do
