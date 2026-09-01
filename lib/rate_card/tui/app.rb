@@ -2,6 +2,7 @@
 
 require 'bubbletea'
 require 'bubbles'
+require 'ntcharts'
 
 module RateCard
   module TUI
@@ -49,6 +50,8 @@ module RateCard
         @completed = 0
         @failed = 0
         @failure_history = []
+        @failure_sparkline = Ntcharts::Sparkline.new(32, 1)
+        @failure_sparkline.style = Lipgloss::Style.new.foreground(Theme::WARNING)
         @log = []
       end
 
@@ -365,6 +368,7 @@ module RateCard
         @completed = message.completed
         @failed = message.failed
         @failure_history << message.failed
+        @failure_sparkline.push(message.failed)
       end
 
       def finish(grid)
@@ -433,7 +437,17 @@ module RateCard
         percent = total.zero? ? 0.0 : @completed.to_f / total
         line = "  #{@progress.view_as(percent)}  #{@completed}/#{total}"
         line += "  #{Theme.warning("#{Theme::ALERT} #{@failed} failed")}" if @failed.positive?
-        "#{Theme.bold('  fetching rates')}\n#{line}"
+        view = "#{Theme.bold('  fetching rates')}\n#{line}"
+        view += "\n#{failure_sparkline_view}" if @failed.positive?
+        view
+      end
+
+      # Only drawn once a failure has happened: a spark line of zeroes for a
+      # clean run would be noise, not signal. It stays once shown even if
+      # later ticks are all clean — the failure already happened.
+      def failure_sparkline_view
+        @failure_sparkline.draw_braille
+        "  #{@failure_sparkline.view}"
       end
 
       # One line per answered stage, kept above the current field so the

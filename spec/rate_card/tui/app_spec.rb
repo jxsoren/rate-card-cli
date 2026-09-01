@@ -89,6 +89,14 @@ RSpec.describe RateCard::TUI::App do
     press(model, Keys.up, Keys.enter)
   end
 
+  # Reaches :fetching without letting the fetch's Proc command run — used when a
+  # test wants to inject its own ProgressAdvanced messages instead of letting a
+  # FakeClient-backed fetch complete synchronously and race past :fetching.
+  def enter_fetching_stage_without_fetching(model)
+    press(model, Keys.up)
+    model.update(Keys.enter)
+  end
+
   # The confirm is reached but not answered, so the spec can be inspected
   # without the fetch starting.
   def spec_from(model)
@@ -366,6 +374,32 @@ RSpec.describe RateCard::TUI::App do
       model.update(RateCard::TUI::ProgressAdvanced.new(completed: 3, failed: 1))
 
       expect(model.instance_variable_get(:@failure_history)).to eq([0, 1, 1])
+    end
+
+    it 'omits the sparkline while every call has succeeded' do
+      model = start
+      answer_happy_path(model)
+      enter_fetching_stage_without_fetching(model)
+
+      model.update(RateCard::TUI::ProgressAdvanced.new(completed: 1, failed: 0))
+
+      expect(model.view).not_to include('failed')
+    end
+
+    it 'shows a sparkline once a failure happens, and keeps it after later clean ticks' do
+      model = start
+      answer_happy_path(model)
+      enter_fetching_stage_without_fetching(model)
+
+      model.update(RateCard::TUI::ProgressAdvanced.new(completed: 1, failed: 0))
+      model.update(RateCard::TUI::ProgressAdvanced.new(completed: 2, failed: 1))
+      view_after_failure = model.view
+
+      model.update(RateCard::TUI::ProgressAdvanced.new(completed: 3, failed: 1))
+      view_after_clean_tick = model.view
+
+      expect(view_after_failure).to include('1 failed')
+      expect(view_after_clean_tick).to include('1 failed')
     end
   end
 
