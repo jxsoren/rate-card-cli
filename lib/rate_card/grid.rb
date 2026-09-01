@@ -40,9 +40,14 @@ module RateCard
     # response-level `warnings` array and the per-service `errors` field. Both
     # arrive with an HTTP 201, so without this a carrier outage would show up as
     # a card of blank cells with nothing to explain them.
+    #
+    # This card's own services sort first, however loud the account-wide noise
+    # is: one call rates every service on the token, so a token with 37 services
+    # enabled can bury the two warnings that explain this card's blank cells
+    # under thirty about services nobody selected.
     def warnings
-      @warnings.map { |message, count| Warning.new(message: message, count: count) }
-               .sort_by { |warning| [-warning.count, warning.message] }
+      @warnings.map { |(message, scope), count| Warning.new(message: message, count: count, scope: scope) }
+               .sort_by { |warning| [scope_rank(warning), -warning.count, warning.message] }
     end
 
     # True only when no call got through. Deliberately NOT "no cell has a
@@ -104,14 +109,18 @@ module RateCard
 
     # Caller holds @mutex.
     def record_warnings(body, by_id)
-      response_warnings(body).each { |message| @warnings[message] += 1 }
+      response_warnings(body).each { |message| @warnings[[message, Warning::ACCOUNT]] += 1 }
 
       spec.services.each do |service|
         detail = error_detail(by_id[service.id])
         next if detail.nil?
 
-        @warnings["#{service.name} (#{service.id}): #{detail}"] += 1
+        @warnings[["#{service.name} (#{service.id}): #{detail}", Warning::SERVICE]] += 1
       end
+    end
+
+    def scope_rank(warning)
+      warning.account_wide? ? 1 : 0
     end
 
     def response_warnings(body)

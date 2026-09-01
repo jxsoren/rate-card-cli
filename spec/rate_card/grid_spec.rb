@@ -239,6 +239,42 @@ RSpec.describe RateCard::Grid do
       expect(grid.warnings.map(&:message)).to eq(['GA (1172): too heavy; bad zip'])
     end
 
+    # The response-level array covers every service enabled on the token, not
+    # just the selected ones, so it cannot be attributed to this card.
+    it 'scopes the response warnings array to the whole token' do
+      client = FakeClient.new { |_w, _p| { 'service_rates' => [], 'warnings' => ['carrier down'] } }
+
+      grid = described_class.build(spec: spec_with(services: [ground], zones: [1], weights: [1]),
+                                   client: client)
+
+      expect(grid.warnings.map(&:scope)).to eq([:account])
+    end
+
+    it 'scopes a selected service errors field to this card' do
+      client = FakeClient.new do |_weight, _postal|
+        { 'service_rates' => [{ 'service_id' => 1172, 'errors' => 'Weight exceeds maximum' }] }
+      end
+
+      grid = described_class.build(spec: spec_with(services: [ground], zones: [1], weights: [1]),
+                                   client: client)
+
+      expect(grid.warnings.map(&:scope)).to eq([:service])
+    end
+
+    # This card's own services first, however loud the account-wide noise is.
+    it 'orders this card\'s warnings ahead of the account-wide ones' do
+      client = FakeClient.new do |_weight, _postal|
+        { 'service_rates' => [{ 'service_id' => 1172, 'errors' => 'too heavy' }],
+          'warnings' => ['Unauthorized Or Invalid pickup'] }
+      end
+
+      grid = described_class.build(spec: spec_with(services: [ground], zones: [1, 2], weights: [1]),
+                                   client: client)
+
+      expect(grid.warnings.map { |w| [w.scope, w.count] })
+        .to eq([[:service, 2], [:account, 2]])
+    end
+
     it 'has no warnings when every service rated cleanly' do
       grid = described_class.build(spec: spec_with(services: [ground]),
                                    client: FakeClient.new(&both_services_responder))

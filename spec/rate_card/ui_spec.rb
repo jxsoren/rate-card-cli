@@ -84,6 +84,29 @@ RSpec.describe RateCard::UI do
       expect(io.string).to include('×12')
     end
 
+    # The account-wide ones are not noise to drop: 'Unable to verify address'
+    # arrives at response level and is about this card's own destination. They
+    # just cannot be blamed on the selected services, so they are labelled.
+    it 'groups the account-wide warnings under their own heading' do
+      ui.warning_report([
+                          RateCard::Warning.new(message: 'GA (1172): too heavy', count: 8, scope: :service),
+                          RateCard::Warning.new(message: 'Invalid pickup', count: 32, scope: :account)
+                        ])
+
+      expect(io.string).to include('the API reported 2 warnings')
+      expect(io.string).to include("for this card's services")
+      expect(io.string).to include('for every service on this token')
+      expect(io.string).to include('GA (1172): too heavy')
+      expect(io.string).to include('Invalid pickup')
+    end
+
+    it 'omits a heading for a group with nothing in it' do
+      ui.warning_report([RateCard::Warning.new(message: 'Invalid pickup', count: 32, scope: :account)])
+
+      expect(io.string).not_to include("for this card's services")
+      expect(io.string).to include('for every service on this token')
+    end
+
     it 'collapses a long warning list to a summary after ten entries' do
       warnings = (1..15).map { |i| RateCard::Warning.new(message: "w#{i}", count: 1) }
       ui.warning_report(warnings)

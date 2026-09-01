@@ -82,12 +82,29 @@ module RateCard
       @io.puts
       noun = warnings.length == 1 ? 'warning' : 'warnings'
       warn "the API reported #{warnings.length} #{noun}"
-      warnings.first(MAX_LISTED_WARNINGS).each do |warning|
-        repeat = warning.count > 1 ? " (×#{warning.count})" : ''
-        @io.puts "      #{warning.message}#{repeat}"
-      end
+
+      listed = warnings.first(MAX_LISTED_WARNINGS)
+      account, service = listed.partition(&:account_wide?)
+      warning_group("for this card's services", service)
+      warning_group('for every service on this token, including ones not in this card', account)
+
       remaining = warnings.length - MAX_LISTED_WARNINGS
       @io.puts "      … and #{remaining} more" if remaining.positive?
+    end
+
+    # Headed rather than filtered. An account-wide message can still be about
+    # this card — 'Unable to verify address' names the destination we sent — so
+    # dropping the ones that do not name a selected service would delete the
+    # most actionable warning in the run. The heading says what it can be
+    # blamed on and leaves the reading to the user.
+    def warning_group(heading, warnings)
+      return if warnings.empty?
+
+      @io.puts "      #{heading}"
+      warnings.each do |warning|
+        repeat = warning.count > 1 ? " (×#{warning.count})" : ''
+        @io.puts "        #{warning.message}#{repeat}"
+      end
     end
 
     def saved(paths)
