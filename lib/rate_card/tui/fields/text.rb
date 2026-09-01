@@ -47,7 +47,7 @@ module RateCard
 
         def view
           lines = ["#{Theme.accent(Theme::CURSOR)} #{Theme.bold(@label)} #{@input.view}"]
-          lines << "  #{Theme.muted(@hint)}" if @hint
+          lines << "  #{Theme.muted("#{@hint} · esc back")}" if @hint
           lines << "  #{Theme.danger(Theme::CROSS)} #{Theme.danger(@error)}" if @error
           lines.join("\n")
         end

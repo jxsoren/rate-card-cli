@@ -74,7 +74,7 @@ module RateCard
       end
 
       def view
-        transcript = @log.compact
+        transcript = @log.filter_map { |entry| entry[:line] }
         sections = []
         sections << transcript.join("\n") unless transcript.empty?
         sections << stage_view
@@ -97,12 +97,23 @@ module RateCard
       def spinner_or_field(message)
         return advance_spinner(message) if @stage == :loading || @stage == :fetching
         return nil if @field.nil?
+        return retreat if back_key?(message)
 
         command = @field.update(message)
         return command unless @field.done?
 
-        record(@stage, @field.value)
+        value = @field.value
+        # The recap's own Back row, which is the esc key by another name.
+        return retreat if @stage == :confirm && value == :back
+
+        record(@stage, value)
         advance
+      end
+
+      # Esc, at any field including the confirm. The fields never see it, so
+      # none of them has to know about the wizard it sits in.
+      def back_key?(message)
+        message.is_a?(Bubbletea::KeyMessage) && message.esc?
       end
 
       def advance_spinner(message)
@@ -114,7 +125,7 @@ module RateCard
 
       def record(stage, value)
         @answers[stage] = value
-        @log << answered_line(stage, value)
+        @log << { stage: stage, line: answered_line(stage, value) }
       end
 
       def advance
@@ -130,6 +141,33 @@ module RateCard
         nil
       end
 
+      # Steps back to the nearest earlier stage that actually asked something,
+      # skipping the ones that were decided rather than asked. The answer being
+      # revisited seeds the field, and every answer after it is forgotten —
+      # they were given against a choice that may be about to change.
+      def retreat
+        index = STAGES.index(@stage)
+        loop do
+          index -= 1
+          stage = STAGES[index]
+          return nil if index.negative? || stage.nil? || stage == :loading
+
+          field = field_for(stage)
+          next if field.nil?
+
+          forget_from(stage)
+          @stage = stage
+          @field = field
+          return nil
+        end
+      end
+
+      def forget_from(stage)
+        dropped = STAGES[STAGES.index(stage)..]
+        dropped.each { |name| @answers.delete(name) }
+        @log.reject! { |entry| dropped.include?(entry[:stage]) }
+      end
+
       def field_for(stage)
         case stage
         when :carrier      then carrier_field
@@ -139,17 +177,26 @@ module RateCard
         when :weights      then weights_field
         when :package_type then package_type_field
         when :rate_keys    then rate_keys_field
-        when :confirm      then Fields::Confirm.new(label: 'Build this rate card?')
+        when :confirm      then confirm_field
         end
       end
 
       # --------------------------------------------------------------- fields
 
+      # The last gate before production is touched. It opens on Back, not on
+      # Run: the field before it is also confirmed with enter, so a held-down
+      # return key must not be able to start 128 production calls by itself.
+      def confirm_field
+        Fields::Select.new(label: 'Run this rate card?',
+                           choices: [['Run', :run], ['Back', :back]], selected: 1)
+      end
+
       def carrier_field
         carriers = selectable_carriers
         return nil if carriers.length <= 1
 
-        Fields::Select.new(label: 'Carrier', choices: carriers.map { |c| [c, c] })
+        Fields::Select.new(label: 'Carrier', choices: carriers.map { |c| [c, c] },
+                           selected: carriers.index(@answers[:carrier]) || 0)
       end
 
       # Only carriers we hold a zone chart for. A service whose carrier has no
@@ -165,19 +212,22 @@ module RateCard
         choices = @services.select { |service| service.carrier == carrier }
         Fields::MultiSelect.new(
           label: 'Services',
-          choices: choices.map { |service| [service.label, service] }
+          choices: choices.map { |service| [service.label, service] },
+          checked: checked_indexes(choices, @answers[:services])
         )
       end
 
       def zones_field
         available = Constants::Addresses.available_zones(carrier)
-        default = "#{available.first}-#{available.last}"
+        full = "#{available.first}-#{available.last}"
+        answered = @answers[:zones]
 
         Fields::Text.new(
-          label: 'Zones', default: default, hint: "available: #{default}",
+          label: 'Zones', default: answered ? RunSpec.compact_range(answered) : full,
+          hint: "available: #{full}",
           parse: lambda { |raw|
             zones = Input.parse_range(raw) & available
-            raise ArgumentError, "no valid zones in that input (available: #{default})" if zones.empty?
+            raise ArgumentError, "no valid zones in that input (available: #{full})" if zones.empty?
 
             zones
           }
@@ -185,12 +235,17 @@ module RateCard
       end
 
       def unit_field
-        Fields::Select.new(label: 'Weight unit', choices: [['oz', :oz], ['lbs', :lbs]])
+        choices = [['oz', :oz], ['lbs', :lbs]]
+        Fields::Select.new(label: 'Weight unit', choices: choices,
+                           selected: choices.index { |_, unit| unit == @answers[:unit] } || 0)
       end
 
       def weights_field
+        answered = @answers[:weights]
+
         Fields::Text.new(
-          label: 'Weight range', default: Input::DEFAULT_WEIGHT_RANGE,
+          label: 'Weight range',
+          default: answered ? RunSpec.compact_range(answered) : Input::DEFAULT_WEIGHT_RANGE,
           hint: 'a range like 1-16, or a list like 1,4,8',
           parse: lambda { |raw|
             weights = Input.parse_range(raw).reject(&:zero?)
@@ -211,7 +266,8 @@ module RateCard
           return nil
         end
 
-        Fields::Select.new(label: 'Package type', choices: choices.map { |t| [t, t] })
+        Fields::Select.new(label: 'Package type', choices: choices.map { |t| [t, t] },
+                           selected: choices.index(@answers[:package_type]) || 0)
       end
 
       def rate_keys_field
@@ -219,8 +275,17 @@ module RateCard
         Fields::MultiSelect.new(
           label: 'Rate columns',
           choices: keys.map { |key| [RunSpec::RATE_KEY_LABELS.fetch(key), key] },
-          checked: (0...keys.length).to_a
+          checked: @answers[:rate_keys] ? checked_indexes(keys, @answers[:rate_keys]) : (0...keys.length)
         )
+      end
+
+      # Which rows a re-entered multi-select opens with ticked. Values that are
+      # no longer on offer — a service dropped by a carrier change — are simply
+      # not found, and so are not carried forward.
+      def checked_indexes(choices, answered)
+        return [] if answered.nil?
+
+        answered.filter_map { |value| choices.index(value) }
       end
 
       def carrier
@@ -261,22 +326,14 @@ module RateCard
 
       def services_loaded(services)
         @services = services
-        @log << "  #{Theme.ok(Theme::TICK)} #{Theme.bold(identity[:name])} " \
-                "(#{identity[:customer_id]}) · #{services.length} services found"
+        @log << { stage: :loading, line: "  #{Theme.ok(Theme::TICK)} #{Theme.bold(identity[:name])} " \
+                "(#{identity[:customer_id]}) · #{services.length} services found" }
         advance
       end
 
       # ---------------------------------------------------------------- fetch
 
       def start_fetch
-        unless @answers[:confirm]
-          @cancelled = true
-          # Not :fetching — the runner renders once more on the way out, and
-          # fetch_view would dereference a spec that was never built.
-          @stage = :done
-          return Bubbletea.quit
-        end
-
         @spec = build_spec
         # Before the first call, so a bad path is not discovered after 128 of them.
         begin
@@ -346,7 +403,6 @@ module RateCard
         case @stage
         when :loading  then "  #{@spinner.view} Loading available services"
         when :fetching then fetch_view
-        when :done     then nil
         when :confirm  then "#{recap_view}\n\n#{@field.view}"
         else @field&.view
         end

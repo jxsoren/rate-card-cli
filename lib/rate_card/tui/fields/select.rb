@@ -13,10 +13,12 @@ module RateCard
         attr_reader :label
 
         # choices: Array<[display String, value]>
-        def initialize(label:, choices:)
+        # selected: index the cursor starts on, so a field re-entered by going
+        # back opens on the answer it already has rather than on the first row.
+        def initialize(label:, choices:, selected: 0)
           @label = label
           @choices = choices
-          @cursor = 0
+          @cursor = selected
           @value = nil
           @chosen = false
         end
@@ -48,7 +50,7 @@ module RateCard
                        "    #{display}"
                      end
           end
-          lines << "  #{Theme.muted(overflow_hint)}" if overflow_hint
+          lines << "  #{Theme.muted(hint)}"
           lines.join("\n")
         end
 
@@ -67,10 +69,10 @@ module RateCard
           (start...(start + WINDOW))
         end
 
-        def overflow_hint
-          return nil if @choices.length <= WINDOW
-
-          "#{@cursor + 1}/#{@choices.length}"
+        def hint
+          parts = ['↑↓ move', 'enter confirm', 'esc back']
+          parts << "#{@cursor + 1}/#{@choices.length}" if @choices.length > WINDOW
+          parts.join(' · ')
         end
       end
     end

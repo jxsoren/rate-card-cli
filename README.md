@@ -70,10 +70,15 @@ No flags needed — the wizard asks for everything:
    including services that would not quote at a single probe weight.
 3. **Zones** (`1-8`, or `1,3,5`), **weight unit** (`oz`/`lbs`), **weight range**,
    **package type**, **rate columns** (shipper rate, meter rate).
-4. A recap of every answer, with the call count, and a confirm. Enter alone declines —
-   only `y` starts a run. Declining does nothing at all.
+4. A recap of every answer, with the call count, and a **Run** / **Back** choice. It opens on
+   **Back**, so a stray enter carried over from the previous question goes back rather than
+   spending 128 production calls; `ctrl-c` abandons the session outright.
 
 Bad input at the zone or weight prompt re-prompts; it never costs you the run.
+
+`esc` steps back to the previous question at any point in the wizard, including from the recap.
+The question you land on reopens on the answer it already has; the answers that came *after* it
+are forgotten, since they were given against a choice you are about to change.
 
 ### Keys
 
@@ -83,6 +88,7 @@ Bad input at the zone or weight prompt re-prompts; it never costs you the run.
 | `space` | Tick or untick (services, rate columns) |
 | `a` | Tick or untick everything |
 | `enter` | Confirm the answer |
+| `esc` | Go back to the previous question |
 | `ctrl-c` | Abandon the run at any point |
 
 Answered questions stay on screen as you go, and the fetch shows a live bar with a running

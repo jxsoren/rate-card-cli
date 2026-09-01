@@ -74,6 +74,21 @@ RSpec.describe RateCard::TUI::App do
     model
   end
 
+  def answer_rest(model)
+    press(model, Keys.space, Keys.enter)         # services: first
+    press(model, Keys.enter)                     # zones
+    press(model, Keys.enter)                     # unit
+    press(model, Keys.enter)                     # weights
+    press(model, Keys.enter)                     # package type
+    press(model, Keys.enter)                     # rate keys
+    model
+  end
+
+  # The recap opens on Back, so starting the run is up-then-enter.
+  def start_run(model)
+    press(model, Keys.up, Keys.enter)
+  end
+
   # The confirm is reached but not answered, so the spec can be inspected
   # without the fetch starting.
   def spec_from(model)
@@ -150,41 +165,87 @@ RSpec.describe RateCard::TUI::App do
       expect(view).to include('parcel')
       expect(view).to include('shipper rate, meter rate')
       expect(view).to include('128 rate calls against production')
-      expect(view).to include('Build this rate card?')
+      expect(view).to include('Run this rate card?')
     end
   end
 
-  describe 'declining and cancelling' do
-    it 'is cancelled when the confirmation is declined' do
+  describe 'the Run/Back choice' do
+    it 'opens on Back, so a stray enter goes back instead of starting a run' do
       model = answer_happy_path(start)
-      press(model, Keys.char('n'))
+      press(model, Keys.enter)
 
-      expect(model).to be_cancelled
+      expect(model.view).to include('Rate columns')
       expect(model.spec).to be_nil
     end
+  end
 
-    # The runner renders once more after the loop stops, so a declined run has
-    # to have a view that does not reach for a spec it never built.
-    it 'still renders after a decline' do
+  describe 'going back' do
+    it 'reopens the previous question and drops its answer from the transcript' do
       model = answer_happy_path(start)
-      press(model, Keys.char('n'))
+      press(model, Keys.esc) # confirm -> rate columns
 
-      expect { model.view }.not_to raise_error
+      expect(model.view).to include('Rate columns')
+      expect(model.view).not_to include('128 rate calls')
+      expect(model.view).not_to include('columns: shipper rate')
     end
 
+    it 'walks all the way back to the first question' do
+      model = answer_happy_path(start)
+      7.times { press(model, Keys.esc) }
+
+      expect(model.view).to include('Carrier')
+    end
+
+    it 'stays put at the first question rather than falling out of the wizard' do
+      model = start
+      3.times { press(model, Keys.esc) }
+
+      expect(model.view).to include('Carrier')
+      expect(model).not_to be_cancelled
+    end
+
+    it 'reopens a select on the answer it already has' do
+      model = start
+      press(model, Keys.down, Keys.enter) # carrier: fedex
+      press(model, Keys.esc)
+
+      press(model, Keys.enter) # take whatever the cursor sits on
+      expect(spec_from(answer_rest(model)).carrier).to eq('FedEx')
+    end
+
+    it 'keeps an amended answer and forgets the ones that followed it' do
+      model = answer_happy_path(start)
+      press(model, Keys.esc)                     # back to rate columns
+      press(model, Keys.esc)                     # back to package type (or weights)
+      press(model, Keys.esc)                     # back to weights
+      press(model, Keys.type('1-4'), Keys.enter) # amend
+      press(model, Keys.enter)                   # package type
+      press(model, Keys.enter)                   # rate columns
+
+      spec = spec_from(model)
+      expect(spec.weights).to eq([1, 2, 3, 4])
+      expect(model.view.scan('weights:').length).to eq(1)
+    end
+
+    # A carrier change invalidates the services picked under the old one, so
+    # they are not carried forward as ticks into a list they are not in.
+    it 'forgets the services when the carrier changes' do
+      model = answer_happy_path(start)
+      6.times { press(model, Keys.esc) } # back to services
+      press(model, Keys.esc)             # back to carrier
+      press(model, Keys.down, Keys.enter) # carrier: fedex
+
+      expect(model.view).to include('FedEx Ground')
+      expect(model.view).not_to include('USPS Ground Advantage')
+    end
+  end
+
+  describe 'cancelling' do
     it 'still renders after ctrl-c' do
       model = answer_happy_path(start)
       press(model, Keys.ctrl_c)
 
       expect { model.view }.not_to raise_error
-    end
-
-    # Enter alone must not start a production run.
-    it 'treats a bare enter at the confirm as a decline' do
-      model = answer_happy_path(start)
-      press(model, Keys.enter)
-
-      expect(model).to be_cancelled
     end
 
     it 'is cancelled by ctrl-c at any point' do
@@ -274,7 +335,7 @@ RSpec.describe RateCard::TUI::App do
         model = start(output_base: Pathname.new(File.join(dir, 'blocker', 'sub')), client: client)
         answer_happy_path(model)
 
-        expect { press(model, Keys.char('y')) }.not_to raise_error
+        expect { start_run(model) }.not_to raise_error
         expect(model.error).to be_a(RateCard::OutputNotWritable)
         expect(client.payloads).to be_empty
         expect(model.grid).to be_nil
@@ -288,7 +349,7 @@ RSpec.describe RateCard::TUI::App do
         end
         model = start(output_base: Pathname.new(dir), client: client)
         answer_happy_path(model)
-        press(model, Keys.char('y'))
+        start_run(model)
 
         expect(model.grid).to be_a(RateCard::Grid)
         expect(model.grid.any_rates?).to be(true)

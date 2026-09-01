@@ -73,7 +73,7 @@ module RateCard
 
         def hint
           counter = "#{@checked.length}/#{@choices.length} selected"
-          "space toggle · a all · enter confirm · #{counter}"
+          "space toggle · a all · enter confirm · esc back · #{counter}"
         end
 
         # The spacebar arrives as KEY_SPACE from some terminals and as a plain

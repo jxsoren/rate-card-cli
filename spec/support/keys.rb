@@ -31,5 +31,6 @@ module Keys
   def space_rune = char(' ')
   def up    = key(Bubbletea::KeyMessage::KEY_UP)
   def down  = key(Bubbletea::KeyMessage::KEY_DOWN)
+  def esc = key(Bubbletea::KeyMessage::KEY_ESC)
   def ctrl_c = key(Bubbletea::KeyMessage::KEY_CTRL_C)
 end
