@@ -39,4 +39,5 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'bubbles', '~> 0.1'
   spec.add_dependency 'bubbletea', '~> 0.1'
   spec.add_dependency 'lipgloss', '~> 0.2'
+  spec.add_dependency 'ntcharts', '~> 0.1'
 end
