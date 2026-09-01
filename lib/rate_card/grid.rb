@@ -1,0 +1,110 @@
+# frozen_string_literal: true
+
+require 'parallel'
+
+module RateCard
+  # The fetch engine and the assembled result.
+  #
+  # One call per (weight, zone); each response is harvested for every selected
+  # service, since eHub returns rates for all enabled services at once. A cell
+  # whose call failed is nil and is listed in #failures — never 0.0, which in a
+  # rate table reads as a real free rate.
+  class Grid
+    THREADS = 8
+
+    # on_progress: called with no arguments after each completed call.
+    def self.build(spec:, client:, on_progress: nil)
+      new(spec).tap { |grid| grid.send(:fetch_all, client, on_progress) }
+    end
+
+    attr_reader :spec
+
+    def initialize(spec)
+      @spec = spec
+      @cells = {}
+      @failures = []
+      @succeeded = 0
+      @mutex = Mutex.new
+    end
+
+    def value(service_id:, rate_key:, weight:, zone:)
+      @cells[[service_id, rate_key, weight, zone]]
+    end
+
+    def failures
+      @failures.sort_by { |f| [f.weight, f.zone] }
+    end
+
+    # True only when no call got through. Deliberately NOT "no cell has a
+    # value": a run can have every call succeed and still price nothing, if the
+    # API does not return the selected service (USPS First Class is not priced
+    # above 13 oz, for instance). Conflating the two would blame the network for
+    # what is really a service or weight selection problem.
+    def all_failed?
+      @succeeded.zero? && @failures.any?
+    end
+
+    # Did any cell actually get a rate? False means we have nothing to write.
+    def any_rates?
+      @cells.values.any?
+    end
+
+    private
+
+    def fetch_all(client, on_progress)
+      Parallel.each(cell_coordinates, in_threads: THREADS) do |weight, zone|
+        fetch_cell(client, weight, zone)
+        @mutex.synchronize { on_progress&.call }
+      end
+    end
+
+    def cell_coordinates
+      spec.weights.product(spec.zones)
+    end
+
+    def fetch_cell(client, weight, zone)
+      payload = Shipment.new(spec: spec, weight: weight, address: spec.address_for(zone)).payload
+      body = client.fetch_rates(payload)
+      record_response(body, weight, zone)
+      @mutex.synchronize { @succeeded += 1 }
+    rescue Unauthorized
+      # No later call can succeed; let it abort the whole run.
+      raise
+    rescue StandardError => e
+      @mutex.synchronize do
+        @failures << Failure.new(weight: weight, zone: zone, message: e.message)
+      end
+    end
+
+    def record_response(body, weight, zone)
+      by_id = index_by_service_id(body)
+
+      @mutex.synchronize do
+        spec.services.each do |service|
+          entry = by_id[service.id]
+          spec.rate_keys.each do |rate_key|
+            field = RunSpec::RATE_KEY_FIELDS.fetch(rate_key)
+            @cells[[service.id, rate_key, weight, zone]] = coerce(entry && entry[field])
+          end
+        end
+      end
+    end
+
+    def index_by_service_id(body)
+      entries = body.is_a?(Hash) ? (body['service_rates'] || []) : []
+      entries.each_with_object({}) do |entry, acc|
+        id = entry['service_id']
+        acc[id.to_i] = entry unless id.nil?
+      end
+    end
+
+    # nil stays nil. Anything numeric becomes a Float. Never defaults to zero.
+    def coerce(raw)
+      return nil if raw.nil? || raw.to_s.strip.empty?
+
+      Float(raw)
+    rescue ArgumentError, TypeError
+      nil
+    end
+  end
+end
