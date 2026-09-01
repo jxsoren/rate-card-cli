@@ -8,3 +8,5 @@ vendor/bundle
 
 # Internal planning and spec artifacts. Kept locally, not shipped.
 docs/
+
+.worktrees/
