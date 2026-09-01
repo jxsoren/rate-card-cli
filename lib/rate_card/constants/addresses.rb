@@ -61,12 +61,32 @@ module RateCard
 
       module_function
 
+      # Raises rather than falling back. The old USPS default meant asking for
+      # a carrier we have no chart for produced a full, plausible-looking card
+      # priced to USPS zone addresses and labeled Z1-Z8 — wrong in a way
+      # nothing downstream could detect. A missing chart is a missing chart.
       def for_carrier(carrier)
-        BY_CARRIER.fetch(carrier.to_s, USPS)
+        BY_CARRIER.fetch(carrier.to_s) do
+          raise UnsupportedCarrier,
+                "no curated zone chart for #{carrier} — rate cards are only " \
+                "available for #{supported_carriers.join(', ')}. Adding one means " \
+                "hand-verifying a destination address per zone against that " \
+                'carrier\'s own zone chart and adding it to Addresses::BY_CARRIER.'
+        end
       end
 
+      def supported?(carrier)
+        BY_CARRIER.key?(carrier.to_s)
+      end
+
+      def supported_carriers
+        BY_CARRIER.keys
+      end
+
+      # [] for a carrier with no chart, so the wizard can ask about zones
+      # without having to rescue.
       def available_zones(carrier)
-        for_carrier(carrier).keys.sort
+        supported?(carrier) ? for_carrier(carrier).keys.sort : []
       end
     end
   end

@@ -11,6 +11,13 @@ RSpec.describe RateCard::Constants::Carriers do
       expect(described_class.for_carrier_code(' USPS ')).to eq('USPS')
     end
 
+    # 'dhl_ecommerce' used to upcase to 'DHL_ECOMMERCE', which matched no zone
+    # chart and fell back to USPS addresses.
+    it 'maps every known DHL code to the same display carrier' do
+      expect(described_class.for_carrier_code('dhl_ecommerce')).to eq('DHL')
+      expect(described_class.for_carrier_code('dhl')).to eq('DHL')
+    end
+
     it 'names an unrecognised carrier by its own code rather than Other' do
       expect(described_class.for_carrier_code('ontrac')).to eq('ONTRAC')
     end

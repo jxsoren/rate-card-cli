@@ -146,10 +146,19 @@ module RateCard
       # --------------------------------------------------------------- fields
 
       def carrier_field
-        carriers = ServiceCatalog.group_by_carrier(@services).keys
+        carriers = selectable_carriers
         return nil if carriers.length <= 1
 
         Fields::Select.new(label: 'Carrier', choices: carriers.map { |c| [c, c] })
+      end
+
+      # Only carriers we hold a zone chart for. A service whose carrier has no
+      # chart is dropped from the menu rather than offered and then refused
+      # mid-run by Addresses.for_carrier.
+      def selectable_carriers
+        ServiceCatalog.group_by_carrier(@services)
+                      .keys
+                      .select { |carrier| Constants::Addresses.supported?(carrier) }
       end
 
       def services_field
@@ -215,7 +224,7 @@ module RateCard
       end
 
       def carrier
-        @answers[:carrier] || ServiceCatalog.group_by_carrier(@services).keys.first
+        @answers[:carrier] || selectable_carriers.first
       end
 
       # ------------------------------------------------------------ catalogue
@@ -229,12 +238,25 @@ module RateCard
           services = ServiceCatalog.from_response(client.fetch_services)
           if services.empty?
             LoadFailed.new(NoServices.new('the API returned no services for this token'))
+          elsif (rateable = with_supported_carrier(services)).empty?
+            LoadFailed.new(UnsupportedCarrier.new(unsupported_message(services)))
           else
-            ServicesLoaded.new(services)
+            ServicesLoaded.new(rateable)
           end
         rescue StandardError => e
           LoadFailed.new(e)
         end
+      end
+
+      def with_supported_carrier(services)
+        services.select { |service| Constants::Addresses.supported?(service.carrier) }
+      end
+
+      def unsupported_message(services)
+        offered = services.map(&:carrier).uniq.sort.join(', ')
+        "this token's services are all on carriers with no curated zone chart " \
+          "(#{offered}) — rate cards are only available for " \
+          "#{Constants::Addresses.supported_carriers.join(', ')}"
       end
 
       def services_loaded(services)

@@ -12,9 +12,16 @@ module RateCard
       # Every /services entry carries a lowercase carrier_code. Anything not
       # listed here keeps its own code, upcased: an unrecognised carrier is
       # still better named by itself than lumped into 'Other'.
+      #
+      # DHL reaches /services as 'dhl_ecommerce', not 'dhl'. Left unmapped it
+      # upcased to 'DHL_ECOMMERCE', which matched neither DISPLAY_ORDER nor
+      # Addresses::BY_CARRIER — so the wizard silently rated DHL against the
+      # USPS zone chart. Any further DHL code (dhl_express and friends) needs
+      # its own entry here AND its own chart in Addresses before it can be
+      # offered; do not assume one DHL zone chart serves all of them.
       CARRIER_CODES = {
         'usps' => 'USPS', 'ups' => 'UPS', 'fedex' => 'FedEx',
-        'dhl' => 'DHL', 'amazon' => 'Amazon'
+        'dhl' => 'DHL', 'dhl_ecommerce' => 'DHL', 'amazon' => 'Amazon'
       }.freeze
 
       module_function
