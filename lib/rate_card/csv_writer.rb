@@ -8,8 +8,8 @@ module RateCard
   # Writes the grid to disk: one CSV per service per rate key, into the run's
   # timestamped directory. A nil cell is an empty field, never 0.0.
   class CsvWriter
-    # Called before fetching, so a bad destination is reported before the user
-    # pays for a few hundred production calls rather than after.
+    # Called before fetching, so a bad destination is reported up front rather
+    # than after a few hundred calls and a minute of waiting have been spent.
     def self.ensure_writable!(base)
       base = Pathname.new(base)
       FileUtils.mkdir_p(base)

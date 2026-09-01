@@ -5,8 +5,8 @@ require 'json'
 
 module RateCard
   # Reads claims out of an eHub JWT so we can show the user which customer a
-  # pasted token belongs to. We decode so the user can confirm the account before
-  # the tool spends money on billable production calls. Deliberately does NOT
+  # pasted token belongs to. We decode so the user can confirm they are pointed at
+  # the intended production account before a run starts. Deliberately does NOT
   # verify the signature: these claims are displayed, never trusted for
   # authorization. The API's 401 is the only real check.
   module Token
@@ -24,6 +24,7 @@ module RateCard
       user = payload.dig('data', 'user') || {}
 
       customer_id = user['customer_id']
+      # We don't need to raise an exception upon no customer_id here. 
       raise DecodeError, 'token payload has no customer_id' unless customer_id.is_a?(Integer)
 
       email = presence(user['email'])

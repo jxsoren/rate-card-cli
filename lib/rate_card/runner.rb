@@ -11,7 +11,7 @@ module RateCard
     end
 
     def run
-      # Before any billable call, so a bad path is not discovered after 128 of them.
+      # Before the first call, so a bad path is not discovered after 128 of them.
       CsvWriter.ensure_writable!(spec.output_base)
 
       grid = fetch(spec, client)
