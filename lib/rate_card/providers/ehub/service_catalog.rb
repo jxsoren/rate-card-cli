@@ -9,6 +9,7 @@ module RateCard
       module ServiceCatalog
         module_function
 
+        # Returns Array<Service>, de-duplicated and sorted for display.
         def from_response(body)
           entries = body.is_a?(Hash) ? (body['services'] || []) : []
 
@@ -16,6 +17,7 @@ module RateCard
           sort_for_display(services)
         end
 
+        # Returns { carrier => Array<Service> } with carriers in display order.
         def group_by_carrier(services)
           services.group_by(&:carrier)
                   .sort_by { |carrier, _| carrier_rank(carrier) }
@@ -39,6 +41,8 @@ module RateCard
           )
         end
 
+        # services[].package_types is an array of {type, name}; only the type is
+        # sent back in a rate request.
         def package_types(entry)
           Array(entry['package_types']).filter_map do |package_type|
             next package_type.to_s unless package_type.is_a?(Hash)
