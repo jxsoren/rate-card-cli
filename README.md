@@ -12,9 +12,6 @@ brew install jxsoren/tools/rate-card
 rate-card
 ```
 
-> The tap repo (`jxsoren/homebrew-tools`) does not exist yet, so this command does not
-> work until it is created — see **Release** below. The gem install underneath it does.
-
 Homebrew installs its own Ruby and keeps every gem inside the keg, so this cannot
 collide with an rbenv or system Ruby you already have.
 
