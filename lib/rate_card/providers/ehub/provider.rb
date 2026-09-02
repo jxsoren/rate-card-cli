@@ -67,6 +67,10 @@ module RateCard
           end
         end
 
+        # RunSpec::RATE_KEY_FIELDS stays top-level rather than provider-owned (see
+        # its own comment), but the field names it maps to ('rate', 'meter_rate')
+        # are an eHub API fact — a provider whose response uses different field
+        # names would need RATE_KEY_FIELDS to become provider-specific too.
         def service_values(spec, by_id)
           spec.services.each_with_object({}) do |service, acc|
             entry = by_id[service.id]

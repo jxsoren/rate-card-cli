@@ -17,13 +17,6 @@ module RateCard
           sort_for_display(services)
         end
 
-        # Returns { carrier => Array<Service> } with carriers in display order.
-        def group_by_carrier(services)
-          services.group_by(&:carrier)
-                  .sort_by { |carrier, _| carrier_rank(carrier) }
-                  .to_h
-        end
-
         def build_service(entry)
           id = entry['service_id']
           return nil if id.nil?

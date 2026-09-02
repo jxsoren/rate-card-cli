@@ -3,6 +3,20 @@
 module RateCard
   # One shipping service the customer has enabled, as discovered from a probe call.
   Service = Struct.new(:id, :code, :name, :carrier, :package_types, keyword_init: true) do
+    # Returns { carrier => Array<Service> } with carriers in display order.
+    # Provider-agnostic: any provider's #parse_services returns these same
+    # structs, so grouping them for display doesn't belong to any one provider.
+    def self.group_by_carrier(services)
+      services.group_by(&:carrier)
+              .sort_by { |carrier, _| carrier_rank(carrier) }
+              .to_h
+    end
+
+    def self.carrier_rank(carrier)
+      index = Constants::Carriers.display_order.index(carrier)
+      index || Constants::Carriers.display_order.length
+    end
+
     # The package types this service accepts, from services[].package_types.
     # Always an array: callers offer these as choices, and a nil would have to
     # be guarded at every one of them.

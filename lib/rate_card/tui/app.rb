@@ -221,7 +221,7 @@ module RateCard
       # chart is dropped from the menu rather than offered and then refused
       # mid-run by Addresses.for_carrier.
       def selectable_carriers
-        carriers = Providers::EHub::ServiceCatalog.group_by_carrier(@services)
+        carriers = Service.group_by_carrier(@services)
                                  .keys
                                  .select { |carrier| Constants::Addresses.supported?(carrier) }
         return carriers & ['USPS'] if @answers[:rate_mode] == :cubic
