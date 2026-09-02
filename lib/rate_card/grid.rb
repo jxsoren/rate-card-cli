@@ -21,6 +21,9 @@ module RateCard
 
     attr_reader :spec
 
+    # provider defaults to nil only for specs that construct a Grid directly to
+    # seed @cells as a fixture and never fetch — #build (the real constructor)
+    # always supplies one.
     def initialize(spec, provider = nil)
       @spec = spec
       @provider = provider
