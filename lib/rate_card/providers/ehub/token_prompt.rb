@@ -32,7 +32,7 @@ module RateCard
 
         def read(ui:, io: $stdin)
           loop do
-            io.print(BRACKETED_PASTE_OFF) if io.tty?
+            $stdout.print(BRACKETED_PASTE_OFF) if io.tty?
             ui.prompt('eHub API token: ')
             raw = read_masked(io)
             return nil if raw.nil?

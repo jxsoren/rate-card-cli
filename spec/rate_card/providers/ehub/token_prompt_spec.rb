@@ -66,4 +66,26 @@ RSpec.describe RateCard::Providers::EHub::TokenPrompt do
 
     expect(described_class.read(ui: ui, io: io)).to eq(token)
   end
+
+  # StringIO#tty? is always false, so a plain StringIO never exercises the
+  # bracketed-paste reset write — it has to go to $stdout, not to `io`
+  # ($stdin in real use, which is never open for writing). Regression for the
+  # IOError this raised on every terminal when it wrote to `io` instead.
+  it 'resets bracketed paste on the real output stream, not the input stream' do
+    tty_stdin = StringIO.new("#{token}\n")
+    def tty_stdin.tty?
+      true
+    end
+
+    fake_stdout = StringIO.new
+    original_stdout = $stdout
+    $stdout = fake_stdout
+    begin
+      expect(described_class.read(ui: ui, io: tty_stdin)).to eq(token)
+    ensure
+      $stdout = original_stdout
+    end
+
+    expect(fake_stdout.string).to include("\e[?2004l")
+  end
 end
