@@ -650,6 +650,12 @@ RSpec.describe RateCard::TUI::App do
       expect(model.results.length).to eq(2)
       expect(model.results.map { |r| r[:spec].zones }).to eq([[:edas], [:rdas]])
       expect(model.results).to all(satisfy { |r| r[:grid].any_rates? })
+
+      # Regression: the real Bubbletea::Runner renders once more after the
+      # last pass returns Bubbletea.quit, before the loop actually stops.
+      # That render still hits :fetching's view and must not crash on a
+      # cleared @spec.
+      expect { model.view }.not_to raise_error
     end
   end
 end

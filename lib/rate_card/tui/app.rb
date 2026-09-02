@@ -439,10 +439,16 @@ module RateCard
         next_pass
       end
 
+      # Does not clear @spec when there is no next pass: Bubbletea renders once
+      # more before a returned Bubbletea.quit actually stops the loop, and
+      # that render still hits :fetching's view, which reads @spec. Leaving it
+      # pointed at the just-finished pass keeps that last render honest rather
+      # than crashing on a nil spec.
       def next_pass
-        @spec = @pending_specs.shift
-        return Bubbletea.quit if @spec.nil?
+        next_spec = @pending_specs.shift
+        return Bubbletea.quit if next_spec.nil?
 
+        @spec = next_spec
         @pass_index += 1
         @completed = 0
         @failed = 0
