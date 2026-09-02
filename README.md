@@ -5,15 +5,32 @@ Interactive CLI that generates a shipping rate card — a weight × zone grid of
 
 ## Install
 
-Homebrew — nothing else needed, and no Ruby setup of your own:
+Copy and run this. You do not need Ruby, or anything else, installed first:
 
 ```bash
-brew install jxsoren/tools/rate-card
+cd ~ && brew install jxsoren/tools/rate-card
+```
+
+Then run it:
+
+```bash
 rate-card
 ```
 
-Homebrew installs its own Ruby and keeps every gem inside the keg, so this cannot
-collide with an rbenv or system Ruby you already have.
+Homebrew installs its own Ruby and keeps every dependency inside the keg, so this cannot
+collide with an rbenv, asdf or system Ruby you already have.
+
+<details>
+<summary>Don't have Homebrew?</summary>
+
+Install it first — this asks for your Mac password and takes a few minutes:
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+Follow the "Next steps" it prints at the end, then run the install command above.
+</details>
 
 If you already work in Ruby, the gem is equivalent:
 
@@ -21,7 +38,41 @@ If you already work in Ruby, the gem is equivalent:
 gem install rate-card
 ```
 
-To upgrade: `brew upgrade rate-card`, or `gem update rate-card`.
+## Update
+
+New versions are not delivered automatically, and the tool will not tell you one exists.
+When a new version is announced:
+
+```bash
+cd ~ && brew update && brew upgrade rate-card
+```
+
+`brew update` is what tells your machine a new version exists — Homebrew only checks for
+itself once every 24 hours, so without it `brew upgrade` may report nothing to do.
+
+Check what you are on with `rate-card --version`, and what is current at
+[rubygems.org/gems/rate-card](https://rubygems.org/gems/rate-card).
+
+## Uninstall
+
+```bash
+brew uninstall rate-card
+```
+
+## If the install or update fails
+
+**`The current working directory must exist to run brew`** — your terminal is sitting in a
+folder that has since been deleted or renamed. `cd ~` fixes it, which is why the commands
+above start with it. Confirm it is not this tool by running `brew --version`; it fails the
+same way.
+
+**`No available formula with the name "rate-card"`** — the tap part of the name is missing.
+Use the full `jxsoren/tools/rate-card`, not just `rate-card`.
+
+**`command not found: rate-card`** after a successful install — open a new terminal so it
+picks up Homebrew's PATH.
+
+Anything else: send the full output.
 
 ## Develop
 
