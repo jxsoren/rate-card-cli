@@ -106,6 +106,12 @@ RSpec.describe RateCard::TUI::App do
     model.send(:build_spec)
   end
 
+  # Every pass that would run — usually one, but more than one for UPS rural
+  # mode with several surcharge types checked.
+  def specs_from(model)
+    model.send(:build_specs)
+  end
+
   describe 'the happy path' do
     it 'builds a validated RunSpec' do
       model = answer_happy_path(start)
@@ -520,7 +526,7 @@ RSpec.describe RateCard::TUI::App do
     end
   end
 
-  describe 'rural / DAS test mode' do
+  describe 'rural / DAS mode' do
     let(:ups_catalog) do
       { 'services' => [
         { 'service_id' => 1172, 'service_code' => 'GroundAdvantage',
@@ -553,46 +559,97 @@ RSpec.describe RateCard::TUI::App do
       press(model, Keys.enter)            # rate by: weight
       press(model, Keys.down, Keys.enter) # carrier: fedex
 
-      expect(model.view).not_to include('Rural / DAS test mode')
+      expect(model.view).not_to include('Rural / DAS')
       expect(model.view).to include('Services')
     end
 
-    it "picks UPS's EDAS/RDAS surcharge address instead of asking for a zone" do
+    it "asks which UPS surcharge type(s) to test with checkboxes, instead of asking for a zone" do
       model = start(client: FakeClient.new(services: ups_catalog))
       press(model, Keys.enter)            # rate by: weight
       press(model, Keys.down, Keys.enter) # carrier: ups
-      press(model, Keys.down, Keys.enter) # rural: EDAS
+      press(model, Keys.down, Keys.enter) # rural: Rural (DAS)
 
       expect(model.view).not_to include('Zones')
-      expect(model.view).to include('Services')
+      expect(model.view).to include('Surcharge types')
+      expect(model.view).to include('EDAS')
+      expect(model.view).to include('RDAS')
+    end
 
+    it 'runs a single UPS pass against the EDAS address when only EDAS is checked' do
+      model = start(client: FakeClient.new(services: ups_catalog))
+      press(model, Keys.enter)                        # rate by: weight
+      press(model, Keys.down, Keys.enter)              # carrier: ups
+      press(model, Keys.down, Keys.enter)              # rural: Rural (DAS)
+      press(model, Keys.down, Keys.space, Keys.enter)  # surcharge types: uncheck RDAS, keep EDAS
+      press(model, Keys.space, Keys.enter)             # services
+      press(model, Keys.enter)                         # unit
+      press(model, Keys.enter)                         # weights
+      press(model, Keys.enter)                         # package type
+      press(model, Keys.enter)                         # rate keys
+
+      specs = specs_from(model)
+      expect(specs.length).to eq(1)
+      expect(specs.first.zones).to eq([:edas])
+      expect(specs.first.address_for(:edas)).to include(city: 'Goshen')
+      expect(specs.first.run_dir.to_s).to end_with('_edas')
+    end
+
+    it 'produces two separate rate cards, one per surcharge type, when both are checked' do
+      model = start(client: FakeClient.new(services: ups_catalog))
+      press(model, Keys.enter)             # rate by: weight
+      press(model, Keys.down, Keys.enter)  # carrier: ups
+      press(model, Keys.down, Keys.enter)  # rural: Rural (DAS)
+      press(model, Keys.enter)             # surcharge types: both pre-ticked
       press(model, Keys.space, Keys.enter) # services
       press(model, Keys.enter)             # unit
       press(model, Keys.enter)             # weights
       press(model, Keys.enter)             # package type
       press(model, Keys.enter)             # rate keys
 
-      spec = spec_from(model)
-      expect(spec.zones).to eq([:edas])
-      expect(spec.address_for(:edas)).to include(city: 'Goshen')
-      expect(spec.run_dir.to_s).to end_with('_edas')
+      specs = specs_from(model)
+      expect(specs.map(&:zones)).to eq([[:edas], [:rdas]])
+      expect(specs[0].address_for(:edas)).to include(city: 'Goshen')
+      expect(specs[1].address_for(:rdas)).to include(city: 'Tyner')
+      expect(specs.map { |s| s.run_dir.to_s.split('_').last }).to eq(%w[edas rdas])
     end
 
-    it "sweeps both EDAS and RDAS addresses as the 'zones' when Both is chosen" do
+    it 'recaps as separate cards and totals the calls across both passes' do
       model = start(client: FakeClient.new(services: ups_catalog))
-      press(model, Keys.enter)                       # rate by: weight
-      press(model, Keys.down, Keys.enter)             # carrier: ups
-      3.times { press(model, Keys.down) }
-      press(model, Keys.enter)                        # rural: Both
-      press(model, Keys.space, Keys.enter)            # services
-      press(model, Keys.enter)                        # unit
-      press(model, Keys.enter)                        # weights
-      press(model, Keys.enter)                        # package type
-      press(model, Keys.enter)                        # rate keys
+      press(model, Keys.enter)             # rate by: weight
+      press(model, Keys.down, Keys.enter)  # carrier: ups
+      press(model, Keys.down, Keys.enter)  # rural: Rural (DAS)
+      press(model, Keys.enter)             # surcharge types: both pre-ticked
+      press(model, Keys.space, Keys.enter) # services
+      press(model, Keys.enter)             # unit
+      press(model, Keys.enter)             # weights
+      press(model, Keys.enter)             # package type
+      press(model, Keys.enter)             # rate keys
 
-      spec = spec_from(model)
-      expect(spec.zones).to eq(%i[edas rdas])
-      expect(spec.address_for(:rdas)).to include(city: 'Tyner')
+      view = model.view
+      expect(view).to include('zones edas')
+      expect(view).to include('zones rdas')
+      expect(view).to include('2 separate cards')
+    end
+
+    it 'runs both UPS passes and reports two finished results, each with its own grid' do
+      client = FakeClient.new(services: ups_catalog) do |weight, _postal|
+        { 'service_rates' => [{ 'service_id' => 700, 'rate' => weight * 1.0 }] }
+      end
+      model = start(client: client)
+      press(model, Keys.enter)             # rate by: weight
+      press(model, Keys.down, Keys.enter)  # carrier: ups
+      press(model, Keys.down, Keys.enter)  # rural: Rural (DAS)
+      press(model, Keys.enter)             # surcharge types: both pre-ticked
+      press(model, Keys.space, Keys.enter) # services
+      press(model, Keys.enter)             # unit
+      press(model, Keys.enter)             # weights
+      press(model, Keys.enter)             # package type
+      press(model, Keys.enter)             # rate keys
+      start_run(model)
+
+      expect(model.results.length).to eq(2)
+      expect(model.results.map { |r| r[:spec].zones }).to eq([[:edas], [:rdas]])
+      expect(model.results).to all(satisfy { |r| r[:grid].any_rates? })
     end
   end
 end

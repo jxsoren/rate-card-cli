@@ -155,10 +155,11 @@ RSpec.describe RateCard::RunSpec do
     end
 
     it 'returns the UPS EDAS/RDAS exception address for a surcharge-type zone' do
-      spec = build(carrier: 'UPS', zones: %i[edas rdas], rural: :both)
+      spec = build(carrier: 'UPS', zones: [:edas], rural: true)
 
       expect(spec.address_for(:edas)).to include(city: 'Goshen')
-      expect(spec.address_for(:rdas)).to include(city: 'Tyner')
+      expect(build(carrier: 'UPS', zones: [:rdas], rural: true).address_for(:rdas))
+        .to include(city: 'Tyner')
     end
   end
 
@@ -168,17 +169,16 @@ RSpec.describe RateCard::RunSpec do
       expect(build(rural: false).rural?).to be(false)
     end
 
-    it 'is true for USPS rural mode or any UPS surcharge selection' do
+    it 'is true when rural mode is on, for either carrier' do
       expect(build(rural: true).rural?).to be(true)
-      expect(build(carrier: 'UPS', rural: :edas).rural?).to be(true)
-      expect(build(carrier: 'UPS', rural: :both).rural?).to be(true)
+      expect(build(carrier: 'UPS', zones: [:edas], rural: true).rural?).to be(true)
     end
   end
 
   describe '#zone_summary (rural symbol zones)' do
-    it 'lists surcharge-type zones rather than range-compacting them' do
-      spec = build(carrier: 'UPS', zones: %i[edas rdas], rural: :both)
-      expect(spec.zone_summary).to eq('edas,rdas')
+    it 'lists a surcharge-type zone rather than range-compacting it' do
+      spec = build(carrier: 'UPS', zones: [:edas], rural: true)
+      expect(spec.zone_summary).to eq('edas')
     end
   end
 
@@ -218,10 +218,9 @@ RSpec.describe RateCard::RunSpec do
       expect(build(rural: true).run_dir.to_s).to end_with('_rural')
     end
 
-    it 'suffixes _edas/_rdas/_edas_rdas for UPS surcharge selections' do
-      expect(build(carrier: 'UPS', rural: :edas).run_dir.to_s).to end_with('_edas')
-      expect(build(carrier: 'UPS', rural: :rdas).run_dir.to_s).to end_with('_rdas')
-      expect(build(carrier: 'UPS', rural: :both).run_dir.to_s).to end_with('_edas_rdas')
+    it 'suffixes _edas or _rdas for a UPS rural pass, one surcharge type per spec' do
+      expect(build(carrier: 'UPS', zones: [:edas], rural: true).run_dir.to_s).to end_with('_edas')
+      expect(build(carrier: 'UPS', zones: [:rdas], rural: true).run_dir.to_s).to end_with('_rdas')
     end
 
     it 'has no suffix when rural mode is off' do

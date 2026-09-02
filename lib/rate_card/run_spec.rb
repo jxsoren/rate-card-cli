@@ -162,13 +162,16 @@ module RateCard
       Pathname.new(output_base).join("#{slug}_#{customer_id}_#{timestamp}#{rural_suffix}")
     end
 
+    # UPS rural mode runs one pass per selected surcharge type (see
+    # TUI::App#build_specs), so a single spec's zones is exactly one symbol -
+    # the suffix names it, so two same-second passes don't collide on
+    # run_dir. USPS rural mode sweeps real zones as usual, so it just gets
+    # the generic suffix.
     def rural_suffix
-      case rural
-      when true then '_rural'
-      when :edas, :rdas then "_#{rural}"
-      when :both then '_edas_rdas'
-      else ''
-      end
+      return '' unless rural?
+
+      surcharge = zones.find { |zone| zone.is_a?(Symbol) }
+      surcharge ? "_#{surcharge}" : '_rural'
     end
 
     def validate!

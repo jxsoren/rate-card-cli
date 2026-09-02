@@ -24,11 +24,14 @@ module RateCard
 
       # No :token stage — see TokenPrompt for why it cannot live in the loop.
       STAGES = %i[
-        loading rate_mode carrier rural services zones unit weights package_type
-        rate_keys confirm fetching
+        loading rate_mode carrier rural rural_surcharges services zones unit weights
+        package_type rate_keys confirm fetching
       ].freeze
 
-      attr_reader :spec, :grid, :error, :notifier
+      # #spec/#grid hold the most recently finished pass, for every caller that
+      # only ever produced one (every carrier except UPS rural mode with more
+      # than one surcharge type checked). #results holds every pass.
+      attr_reader :spec, :grid, :error, :notifier, :results
 
       # notifier is set by the caller to the Bubbletea::Runner, whose #send is
       # the only way a worker thread can get a message onto the event loop.
@@ -54,6 +57,7 @@ module RateCard
         @failure_sparkline = Ntcharts::Sparkline.new(32, 1)
         @failure_sparkline.style = Lipgloss::Style.new.foreground(Theme::WARNING)
         @log = []
+        @results = []
       end
 
       def cancelled? = @cancelled
@@ -69,7 +73,7 @@ module RateCard
         when ServicesLoaded    then services_loaded(message.services)
         when LoadFailed        then return fail_with(message.error)
         when ProgressAdvanced  then progress_advanced(message)
-        when FetchFinished     then return finish(message.grid)
+        when FetchFinished     then return fetch_finished(message.grid)
         when FetchFailed       then return fail_with(message.error)
         else
           return [self, spinner_or_field(message)]
@@ -175,10 +179,11 @@ module RateCard
 
       def field_for(stage)
         case stage
-        when :rate_mode    then rate_mode_field
-        when :carrier      then carrier_field
-        when :rural        then rural_field
-        when :services     then services_field
+        when :rate_mode        then rate_mode_field
+        when :carrier          then carrier_field
+        when :rural            then rural_field
+        when :rural_surcharges then rural_surcharges_field
+        when :services         then services_field
         when :zones        then zones_field
         when :unit         then unit_field
         when :weights      then weights_field
@@ -241,39 +246,36 @@ module RateCard
 
       # Only USPS and UPS have a rural/DAS chart (Addresses::USPS_RURAL_DAS,
       # Addresses::UPS_RURAL); every other carrier is decided :normal (nil)
-      # and skips this stage, same as any other single-answer stage.
+      # and skips this stage, same as any other single-answer stage. Same
+      # Normal/Rural toggle for both carriers - which surcharge type(s) UPS
+      # means by "rural" is a separate question, :rural_surcharges below.
       def rural_field
         return nil unless Constants::Carriers.rural_aware?(carrier)
 
-        choices = carrier == 'USPS' ? usps_rural_choices : ups_rural_choices
-        Fields::Select.new(label: 'Rural / DAS test mode', choices: choices,
+        choices = [['Normal', false], ['Rural (DAS)', true]]
+        Fields::Select.new(label: 'Rural / DAS', choices: choices,
                            selected: choices.index { |_, v| v == @answers[:rural] } || 0)
       end
 
-      def usps_rural_choices
-        [['Normal', false], ['Rural (DAS)', true]]
-      end
+      # UPS has no per-zone rural chart - each surcharge type is one fixed
+      # address, not a zone sweep - so this replaces the zones question for
+      # UPS rural mode. Checking both produces two separate rate cards (see
+      # #build_specs), one per surcharge type, rather than one card that
+      # conflates two different addresses under one "zone" axis.
+      def rural_surcharges_field
+        return nil unless ups_rural?
 
-      def ups_rural_choices
-        [['Normal', nil], ['EDAS', :edas], ['RDAS', :rdas], ['Both', :both]]
-      end
-
-      # UPS rural mode has no real zone choice - each surcharge type is a
-      # single fixed address - so it's decided here as the chosen surcharge
-      # symbol(s) and the zones stage is skipped rather than asked.
-      def ups_rural_zones
-        case @answers[:rural]
-        when :edas then [:edas]
-        when :rdas then [:rdas]
-        when :both then %i[edas rdas]
-        end
+        choices = [['EDAS', :edas], ['RDAS', :rdas]]
+        answered = @answers[:rural_surcharges]
+        Fields::MultiSelect.new(
+          label: 'Surcharge types',
+          choices: choices,
+          checked: answered ? checked_indexes(choices.map(&:last), answered) : (0...choices.length)
+        )
       end
 
       def zones_field
-        if carrier == 'UPS' && (decided = ups_rural_zones)
-          @answers[:zones] = decided
-          return nil
-        end
+        return nil if ups_rural?
 
         available = usps_rural? ? Constants::Addresses::USPS_RURAL_DAS.keys.sort : Constants::Addresses.available_zones(carrier)
         full = "#{available.first}-#{available.last}"
@@ -293,6 +295,10 @@ module RateCard
 
       def usps_rural?
         carrier == 'USPS' && @answers[:rural] == true
+      end
+
+      def ups_rural?
+        carrier == 'UPS' && @answers[:rural] == true
       end
 
       # Weight is fixed per cubic tier, so asking for a display unit is
@@ -413,18 +419,39 @@ module RateCard
 
       # ---------------------------------------------------------------- fetch
 
+      # UPS rural mode with more than one surcharge type checked runs as
+      # several independent passes (see #build_specs) - each one calls
+      # Grid.build, feeds the same progress bar, and lands its own {spec:,
+      # grid:} in #results before the next pass starts. Every other carrier
+      # and mode has exactly one pass, same as before this existed.
       def start_fetch
-        @spec = build_spec
+        @pending_specs = build_specs
         # Before the first call, so a bad path is not discovered after 128 of them.
         begin
-          CsvWriter.ensure_writable!(@spec.output_base)
+          @pending_specs.each { |spec| CsvWriter.ensure_writable!(spec.output_base) }
         rescue OutputNotWritable => e
           return fail_with(e).last
         end
 
+        @results = []
+        @total_passes = @pending_specs.length
+        @pass_index = 0
+        next_pass
+      end
+
+      def next_pass
+        @spec = @pending_specs.shift
+        return Bubbletea.quit if @spec.nil?
+
+        @pass_index += 1
+        @completed = 0
+        @failed = 0
+        fetch_command(@spec)
+      end
+
+      def fetch_command(spec)
         client = @client_factory.call(@token)
         notifier = @notifier
-        spec = @spec
         provider = @provider
 
         lambda do
@@ -448,9 +475,10 @@ module RateCard
         @failure_sparkline.push(message.failed)
       end
 
-      def finish(grid)
+      def fetch_finished(grid)
         @grid = grid
-        [self, Bubbletea.quit]
+        @results << { spec: @spec, grid: grid }
+        [self, next_pass]
       end
 
       def fail_with(error)
@@ -458,7 +486,23 @@ module RateCard
         [self, Bubbletea.quit]
       end
 
+      # One RunSpec per pass. UPS rural mode runs one pass per checked
+      # surcharge type (each is a fixed single address, not a zone sweep -
+      # see Addresses::UPS_RURAL) rather than folding both into one card's
+      # zone axis. Every other carrier/mode is the single pass it always was.
+      def build_specs
+        if ups_rural?
+          (@answers[:rural_surcharges] || []).map { |surcharge| run_spec(zones: [surcharge]) }
+        else
+          [run_spec(zones: @answers[:zones])]
+        end
+      end
+
       def build_spec
+        build_specs.first
+      end
+
+      def run_spec(zones:)
         cubic = @answers[:rate_mode] == :cubic
         RunSpec.new(
           token: @token,
@@ -466,7 +510,7 @@ module RateCard
           customer_id: identity[:customer_id],
           carrier: carrier,
           services: @answers[:services],
-          zones: @answers[:zones],
+          zones: zones,
           weight_unit: @answers[:unit] || :oz,
           weights: cubic ? [] : @answers[:weights],
           cubic_tiers: cubic ? @answers[:weights] : [],
@@ -498,18 +542,24 @@ module RateCard
       # Everything the run will do, gathered in one block. The answers are also
       # in the transcript above, but they arrived one at a time over eight
       # screens; this is the only place they can be read against each other.
+      #
+      # Built from real RunSpecs (build_specs) rather than raw @answers, so a
+      # UPS rural run with both surcharge types checked recaps as the two
+      # separate cards it will actually produce, one line each.
       def recap_view
+        specs = build_specs
         carrier_line = "  #{Theme.bold(carrier)}#{rural_recap} · #{@answers[:services].map(&:name).join(', ')}"
         [
           carrier_line,
-          "  zones #{RunSpec.compact_range(@answers[:zones])} · #{rows_recap} · #{@answers[:package_type]}",
+          *specs.map { |spec| "  zones #{spec.zone_summary} · #{rows_recap} · #{@answers[:package_type]}" },
           "  columns: #{@answers[:rate_keys].map { |k| RunSpec::RATE_KEY_LABELS.fetch(k) }.join(', ')}",
-          "  #{Theme.bold(call_count.to_s)} rate calls against #{Theme.danger('production')}"
+          "  #{Theme.bold(specs.sum(&:call_count).to_s)} rate calls against #{Theme.danger('production')}" \
+            "#{specs.length > 1 ? " (#{specs.length} separate cards)" : ''}"
         ].join("\n")
       end
 
       def rural_recap
-        return '' if !@answers[:rural] || @answers[:rural].nil?
+        return '' unless @answers[:rural]
 
         " (#{rural_label(@answers[:rural])})"
       end
@@ -522,16 +572,13 @@ module RateCard
         end
       end
 
-      def call_count
-        @answers[:weights].length * @answers[:zones].length
-      end
-
       def fetch_view
         total = @spec.call_count
         percent = total.zero? ? 0.0 : @completed.to_f / total
+        title = @total_passes > 1 ? "fetching rates (pass #{@pass_index}/#{@total_passes})" : 'fetching rates'
         line = "  #{@progress.view_as(percent)}  #{@completed}/#{total}"
         line += "  #{Theme.warning("#{Theme::ALERT} #{@failed} failed")}" if @failed.positive?
-        view = "#{Theme.bold('  fetching rates')}\n#{line}"
+        view = "#{Theme.bold("  #{title}")}\n#{line}"
         view += "\n#{failure_sparkline_view}" if @failed.positive?
         view
       end
@@ -548,8 +595,9 @@ module RateCard
       # transcript of the run stays on screen — the recap is then a summary of
       # what is already visible rather than the first chance to check it.
       def answered_line(stage, value)
-        label = { rate_mode: 'rate by', carrier: 'carrier', rural: 'rural / DAS', services: 'services',
-                  zones: 'zones', unit: 'unit', weights: 'weights', package_type: 'package',
+        label = { rate_mode: 'rate by', carrier: 'carrier', rural: 'rural / DAS',
+                  rural_surcharges: 'surcharge types', services: 'services', zones: 'zones',
+                  unit: 'unit', weights: 'weights', package_type: 'package',
                   rate_keys: 'columns' }[stage]
         label = 'cubic tiers' if stage == :weights && @answers[:rate_mode] == :cubic
         return nil if label.nil?
@@ -559,22 +607,18 @@ module RateCard
 
       def describe(stage, value)
         case stage
-        when :services  then value.map(&:name).join(', ')
-        when :zones     then RunSpec.compact_range(value)
-        when :weights   then RunSpec.compact_range(value)
-        when :rural     then rural_label(value)
-        when :rate_keys then value.map { |k| RunSpec::RATE_KEY_LABELS.fetch(k) }.join(', ')
+        when :services          then value.map(&:name).join(', ')
+        when :zones             then RunSpec.compact_range(value)
+        when :weights           then RunSpec.compact_range(value)
+        when :rural             then rural_label(value)
+        when :rural_surcharges  then value.map { |v| v.to_s.upcase }.join(', ')
+        when :rate_keys         then value.map { |k| RunSpec::RATE_KEY_LABELS.fetch(k) }.join(', ')
         else value.to_s
         end
       end
 
       def rural_label(value)
-        case value
-        when false, nil then 'normal'
-        when true       then 'rural (DAS)'
-        when :edas, :rdas then value.to_s.upcase
-        when :both      then 'EDAS + RDAS'
-        end
+        value ? 'rural (DAS)' : 'normal'
       end
     end
   end

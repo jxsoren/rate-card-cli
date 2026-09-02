@@ -102,7 +102,13 @@ else
   exit 1
 end
 
-spec = app.spec
-spec.show_table = options[:show_table]
+# Usually one pass. UPS rural mode with more than one surcharge type checked
+# produces several - each is its own card with its own files, run and
+# reported independently so one failing does not stop the others from
+# writing. The process exit code is the worst of all of them.
+exit_codes = app.results.map do |result|
+  result[:spec].show_table = options[:show_table]
+  RateCard::Runner.new(spec: result[:spec], grid: result[:grid], ui: ui).run
+end
 
-exit RateCard::Runner.new(spec: spec, grid: app.grid, ui: ui).run
+exit exit_codes.max
