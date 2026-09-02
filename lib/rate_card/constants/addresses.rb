@@ -65,7 +65,12 @@ module RateCard
       # calculator, split this back into its own hand-verified hash.
       DHL_ECOMMERCE = USPS
 
-      BY_CARRIER = { 'USPS' => USPS, 'UPS' => UPS, 'FedEx' => FEDEX, 'DHL' => DHL_ECOMMERCE }.freeze
+      # OSM's zone calculator in ehub (app/services/carriers/osm/zone_calculator.rb)
+      # is likewise an unmodified subclass of USPS's, so OSM zones are USPS
+      # zones - same reasoning as DHL_ECOMMERCE above.
+      OSM = USPS
+
+      BY_CARRIER = { 'USPS' => USPS, 'UPS' => UPS, 'FedEx' => FEDEX, 'DHL' => DHL_ECOMMERCE, 'OSM' => OSM }.freeze
 
       module_function
 

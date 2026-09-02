@@ -24,6 +24,10 @@ RSpec.describe RateCard::Constants::Carriers do
       expect(described_class.for_carrier_code('dhl')).to eq('DHL Express')
     end
 
+    it 'maps osm to its own display carrier' do
+      expect(described_class.for_carrier_code('osm')).to eq('OSM')
+    end
+
     it 'names an unrecognised carrier by its own code rather than Other' do
       expect(described_class.for_carrier_code('ontrac')).to eq('ONTRAC')
     end

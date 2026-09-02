@@ -7,7 +7,7 @@ module RateCard
     module Carriers
       OTHER = 'Other'
 
-      DISPLAY_ORDER = ['USPS', 'UPS', 'FedEx', 'DHL', 'Amazon', OTHER].freeze
+      DISPLAY_ORDER = ['USPS', 'UPS', 'FedEx', 'DHL', 'OSM', 'Amazon', OTHER].freeze
 
       # Every /services entry carries a lowercase carrier_code. Anything not
       # listed here keeps its own code, upcased: an unrecognised carrier is
@@ -27,7 +27,7 @@ module RateCard
       # silently inherit the wrong zone chart.
       CARRIER_CODES = {
         'usps' => 'USPS', 'ups' => 'UPS', 'fedex' => 'FedEx',
-        'dhl' => 'DHL Express', 'dhl_ecommerce' => 'DHL', 'amazon' => 'Amazon'
+        'dhl' => 'DHL Express', 'dhl_ecommerce' => 'DHL', 'osm' => 'OSM', 'amazon' => 'Amazon'
       }.freeze
 
       module_function

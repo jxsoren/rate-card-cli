@@ -32,6 +32,13 @@ RSpec.describe RateCard::Constants::Addresses do
       expect(described_class.for_carrier('DHL')).to eq(described_class.for_carrier('USPS'))
     end
 
+    # OSM's zone calculator in ehub is likewise an unmodified subclass of
+    # USPS's (app/services/carriers/osm/zone_calculator.rb), so OSM zones
+    # are USPS zones too.
+    it 'returns the USPS chart for OSM, since OSM zones are USPS zones' do
+      expect(described_class.for_carrier('OSM')).to eq(described_class.for_carrier('USPS'))
+    end
+
     it 'gives every address the fields a request payload needs' do
       described_class.for_carrier('USPS').each_value do |address|
         expect(address.keys).to include(:address1, :city, :state, :postal_code, :country)
@@ -54,12 +61,17 @@ RSpec.describe RateCard::Constants::Addresses do
     it 'lists zones 1-8 for DHL, same as USPS' do
       expect(described_class.available_zones('DHL')).to eq((1..8).to_a)
     end
+
+    it 'lists zones 1-8 for OSM, same as USPS' do
+      expect(described_class.available_zones('OSM')).to eq((1..8).to_a)
+    end
   end
 
   describe '.supported?' do
     it 'is true only for a carrier we hold a chart for' do
       expect(described_class.supported?('USPS')).to be(true)
       expect(described_class.supported?('DHL')).to be(true)
+      expect(described_class.supported?('OSM')).to be(true)
       expect(described_class.supported?('Nonesuch')).to be(false)
     end
   end
