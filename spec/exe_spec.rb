@@ -16,7 +16,10 @@ RSpec.describe 'exe/rate-card' do
   it 'prints the version and exits 0 for --version' do
     stdout, _stderr, status = run_cli('--version')
 
-    expect(stdout).to include('0.1.0')
+    # Against the constant, not a literal: a hardcoded version turns every
+    # release into a failing spec, and bin/release gates the release on the
+    # suite passing.
+    expect(stdout).to include(RateCard::VERSION)
     expect(status.exitstatus).to eq(0)
   end
 
