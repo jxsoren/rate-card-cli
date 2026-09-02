@@ -45,16 +45,36 @@ them. Note that `bubbles` is a shared gem name — `0.0.x` is an unrelated gem t
 
 ## Release
 
-Bump `lib/rate_card/version.rb`, commit, then:
+Commits to `main` do not reach users. `brew install` serves the published gem, so everyone
+stays on the last released version until you cut a new one. The only input is the version.
+
+One-time setup:
 
 ```bash
+gh repo clone jxsoren/homebrew-tools ~/homebrew-tools
+```
+
+Per release — bump `lib/rate_card/version.rb`, commit, then:
+
+```bash
+bin/release --dry-run    # optional: everything except the two publishing steps
 bin/release
 ```
 
-That runs the specs, builds and pushes the gem, and rewrites the formula's `url` and
-`sha256` to match what was pushed. The tap commit is left to you — see the script's
-closing output. `packaging/homebrew/rate-card.rb` is the source of truth for the formula;
-the tap's `Formula/rate-card.rb` is a copy.
+That runs preflight (clean tree, version not already published, tag free, tap clean and
+up to date), runs the specs, builds the gem, pushes it to RubyGems, rewrites the formula's
+`url` and `sha256` to the checksum of the exact file pushed, commits and tags here, and
+commits and pushes the formula to the tap. No manual steps.
+
+Preflight runs before anything is published because a release cannot be undone — RubyGems
+refuses to re-push a version even after a yank. If a step *after* the gem push fails, the
+gem is already public: re-run the formula steps by hand rather than bumping the version.
+
+Versioning: bug fix `0.1.1`, new feature `0.2.0`, breaking change to flags or output
+`1.0.0`. Users upgrade with `brew update && brew upgrade rate-card`.
+
+`packaging/homebrew/rate-card.rb` is the source of truth for the formula; the tap's
+`Formula/rate-card.rb` is a copy written by `bin/release`.
 
 ## Use
 
