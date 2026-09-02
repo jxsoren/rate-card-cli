@@ -75,4 +75,30 @@ RSpec.describe RateCard::Constants::Addresses do
       expect(described_class.supported?('Nonesuch')).to be(false)
     end
   end
+
+  describe 'USPS_RURAL_DAS' do
+    it 'has a rural surcharge test address for zones 0-8' do
+      expect(described_class::USPS_RURAL_DAS.keys).to eq((0..8).to_a)
+    end
+
+    it 'gives every address the fields a request payload needs' do
+      described_class::USPS_RURAL_DAS.each_value do |address|
+        expect(address.keys).to include(:address1, :city, :state, :postal_code, :country)
+      end
+    end
+  end
+
+  describe 'UPS_EDAS_EXCEPTION' do
+    it 'is a single complete address' do
+      expect(described_class::UPS_EDAS_EXCEPTION)
+        .to include(:address1, :city, :state, :postal_code, :country)
+    end
+  end
+
+  describe 'UPS_RDAS_EXCEPTION' do
+    it 'is a single complete address' do
+      expect(described_class::UPS_RDAS_EXCEPTION)
+        .to include(:address1, :city, :state, :postal_code, :country)
+    end
+  end
 end

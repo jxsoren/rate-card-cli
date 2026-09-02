@@ -47,7 +47,7 @@ module RateCard
     end
 
     def render(service, rate_key)
-      header = [spec.weight_label, *spec.zones.map { |zone| "Z#{zone}" }]
+      header = [spec.weight_label, *spec.zones.map { |zone| spec.zone_label(zone) }]
       body = rows(service, rate_key)
 
       Lipgloss::Table.new

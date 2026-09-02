@@ -67,6 +67,7 @@ RSpec.describe RateCard::TUI::App do
   def answer_happy_path(model)
     press(model, Keys.enter)                     # rate by: weight
     press(model, Keys.enter)                     # carrier: usps
+    press(model, Keys.enter)                     # rural: normal
     press(model, Keys.space, Keys.enter)         # services: first
     press(model, Keys.enter)                     # zones: default 1-8
     press(model, Keys.enter)                     # unit: oz
@@ -143,6 +144,7 @@ RSpec.describe RateCard::TUI::App do
       model = start
       press(model, Keys.enter) # rate by: weight
       press(model, Keys.enter) # carrier: usps
+      press(model, Keys.enter) # rural: normal
 
       expect(model.view).to include('USPS Ground Advantage')
       expect(model.view).not_to include('FedEx Ground')
@@ -202,7 +204,7 @@ RSpec.describe RateCard::TUI::App do
 
     it 'walks all the way back to the first question' do
       model = answer_happy_path(start)
-      8.times { press(model, Keys.esc) }
+      9.times { press(model, Keys.esc) }
 
       expect(model.view).to include('Rate by')
     end
@@ -244,6 +246,7 @@ RSpec.describe RateCard::TUI::App do
     it 'forgets the services when the carrier changes' do
       model = answer_happy_path(start)
       6.times { press(model, Keys.esc) } # back to services
+      press(model, Keys.esc)             # back to rural
       press(model, Keys.esc)             # back to carrier
       press(model, Keys.down, Keys.enter) # carrier: fedex
 
@@ -273,6 +276,7 @@ RSpec.describe RateCard::TUI::App do
       model = start
       press(model, Keys.enter) # rate by: weight
       press(model, Keys.enter) # carrier
+      press(model, Keys.enter) # rural: normal
       press(model, Keys.space, Keys.enter) # services
       press(model, Keys.type('99'), Keys.enter)
 
@@ -286,6 +290,7 @@ RSpec.describe RateCard::TUI::App do
       model = start
       press(model, Keys.enter) # rate by: weight
       press(model, Keys.enter) # carrier
+      press(model, Keys.enter) # rural: normal
       press(model, Keys.space, Keys.enter) # services
       press(model, Keys.enter) # zones
       press(model, Keys.enter) # unit
@@ -432,7 +437,8 @@ RSpec.describe RateCard::TUI::App do
       body = catalog_with([{ 'type' => 'parcel' }, { 'type' => 'flat_rate_box' }])
       model = start(client: FakeClient.new(services: body))
       press(model, Keys.enter)             # rate by: weight (single USPS service present)
-      press(model, Keys.space, Keys.enter) # services (single carrier, so no carrier step)
+      press(model, Keys.enter)             # rural: normal (single carrier, so no carrier step)
+      press(model, Keys.space, Keys.enter) # services
       press(model, Keys.enter)             # zones
       press(model, Keys.enter)             # unit
 
@@ -442,6 +448,7 @@ RSpec.describe RateCard::TUI::App do
 
     it 'falls back to the built-in package types when the catalogue lists none' do
       model = start(client: FakeClient.new(services: catalog_with([])))
+      press(model, Keys.enter)
       press(model, Keys.enter)
       press(model, Keys.space, Keys.enter)
       press(model, Keys.enter)
@@ -455,7 +462,8 @@ RSpec.describe RateCard::TUI::App do
   describe 'cubic mode' do
     def answer_cubic_path(model)
       press(model, Keys.down, Keys.enter)  # rate by: cubic dimensions
-      press(model, Keys.space, Keys.enter) # services: first (USPS, only carrier left)
+      press(model, Keys.enter)             # rural: normal (USPS, only carrier left)
+      press(model, Keys.space, Keys.enter) # services: first
       press(model, Keys.enter)             # zones
       press(model, Keys.enter)             # cubic tiers: all pre-ticked
       press(model, Keys.enter)             # package type
@@ -474,6 +482,7 @@ RSpec.describe RateCard::TUI::App do
     it 'offers the ten official cubic tiers, all ticked by default' do
       model = start
       press(model, Keys.down, Keys.enter)  # rate by: cubic dimensions
+      press(model, Keys.enter)             # rural: normal
       press(model, Keys.space, Keys.enter) # services
       press(model, Keys.enter)             # zones
 
@@ -492,6 +501,7 @@ RSpec.describe RateCard::TUI::App do
     it 'labels the transcript line "cubic tiers", not "weights"' do
       model = start
       press(model, Keys.down, Keys.enter)  # rate by: cubic dimensions
+      press(model, Keys.enter)             # rural: normal
       press(model, Keys.space, Keys.enter) # services
       press(model, Keys.enter)             # zones
       press(model, Keys.enter)             # cubic tiers: all pre-ticked
@@ -507,6 +517,82 @@ RSpec.describe RateCard::TUI::App do
 
       expect(model.view).not_to include('Rate by')
       expect(model.view).to include('Services')
+    end
+  end
+
+  describe 'rural / DAS test mode' do
+    let(:ups_catalog) do
+      { 'services' => [
+        { 'service_id' => 1172, 'service_code' => 'GroundAdvantage',
+          'service' => 'USPS Ground Advantage', 'carrier_code' => 'usps' },
+        { 'service_id' => 700, 'service_code' => 'UPS_GROUND',
+          'service' => 'UPS Ground', 'carrier_code' => 'ups' }
+      ] }
+    end
+
+    it 'is offered for USPS and switches the zone chart to the rural one' do
+      model = start
+      press(model, Keys.enter)             # rate by: weight
+      press(model, Keys.enter)             # carrier: usps
+      press(model, Keys.down, Keys.enter)  # rural: Rural (DAS)
+      press(model, Keys.space, Keys.enter) # services
+      press(model, Keys.enter)             # zones: default now 0-8
+      press(model, Keys.enter)             # unit
+      press(model, Keys.enter)             # weights
+      press(model, Keys.enter)             # package type
+      press(model, Keys.enter)             # rate keys
+
+      spec = spec_from(model)
+      expect(spec.zones).to eq((0..8).to_a)
+      expect(spec.address_for(0)).to include(city: 'Bluebell')
+      expect(spec.run_dir.to_s).to end_with('_rural')
+    end
+
+    it 'is not offered for FedEx' do
+      model = start
+      press(model, Keys.enter)            # rate by: weight
+      press(model, Keys.down, Keys.enter) # carrier: fedex
+
+      expect(model.view).not_to include('Rural / DAS test mode')
+      expect(model.view).to include('Services')
+    end
+
+    it "picks UPS's EDAS/RDAS surcharge address instead of asking for a zone" do
+      model = start(client: FakeClient.new(services: ups_catalog))
+      press(model, Keys.enter)            # rate by: weight
+      press(model, Keys.down, Keys.enter) # carrier: ups
+      press(model, Keys.down, Keys.enter) # rural: EDAS
+
+      expect(model.view).not_to include('Zones')
+      expect(model.view).to include('Services')
+
+      press(model, Keys.space, Keys.enter) # services
+      press(model, Keys.enter)             # unit
+      press(model, Keys.enter)             # weights
+      press(model, Keys.enter)             # package type
+      press(model, Keys.enter)             # rate keys
+
+      spec = spec_from(model)
+      expect(spec.zones).to eq([:edas])
+      expect(spec.address_for(:edas)).to include(city: 'Goshen')
+      expect(spec.run_dir.to_s).to end_with('_edas')
+    end
+
+    it "sweeps both EDAS and RDAS addresses as the 'zones' when Both is chosen" do
+      model = start(client: FakeClient.new(services: ups_catalog))
+      press(model, Keys.enter)                       # rate by: weight
+      press(model, Keys.down, Keys.enter)             # carrier: ups
+      3.times { press(model, Keys.down) }
+      press(model, Keys.enter)                        # rural: Both
+      press(model, Keys.space, Keys.enter)            # services
+      press(model, Keys.enter)                        # unit
+      press(model, Keys.enter)                        # weights
+      press(model, Keys.enter)                        # package type
+      press(model, Keys.enter)                        # rate keys
+
+      spec = spec_from(model)
+      expect(spec.zones).to eq(%i[edas rdas])
+      expect(spec.address_for(:rdas)).to include(city: 'Tyner')
     end
   end
 end

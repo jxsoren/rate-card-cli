@@ -16,7 +16,7 @@ module RateCard
   class RunSpec < Struct.new(
     :token, :customer_name, :customer_id, :carrier, :services, :zones,
     :weight_unit, :weights, :package_type, :rate_keys, :output_base,
-    :show_table, :started_at, :rate_mode, :cubic_tiers,
+    :show_table, :started_at, :rate_mode, :cubic_tiers, :rural,
     keyword_init: true
   )
     # Our rate-key name => the field it arrives as in service_rates. Getting
@@ -44,10 +44,26 @@ module RateCard
       self.class.compact_range(zones)
     end
 
+    def zone_label(zone)
+      zone.is_a?(Symbol) ? zone.to_s.upcase : "Z#{zone}"
+    end
+
+    # true for USPS with rural mode on, or any UPS surcharge type/combination.
+    # nil/false (rural mode off, or a non-rural-aware carrier) is falsy here.
+    def rural?
+      !!rural
+    end
+
     # [1,2,3,5] => "1-3,5". Runs of three or more collapse; a pair stays listed,
     # since "4,5" is no longer than "4-5" and reads as what the user typed.
+    #
+    # UPS rural mode sweeps surcharge-type symbols (:edas, :rdas) instead of
+    # numbered zones - those aren't a range at all, so they're just listed.
     def self.compact_range(numbers)
-      sorted = numbers.to_a.sort.uniq
+      array = numbers.to_a
+      return array.join(',') if array.any? { |n| n.is_a?(Symbol) }
+
+      sorted = array.sort.uniq
       runs = sorted.slice_when { |a, b| b != a + 1 }.to_a
       runs.map { |run| run.length >= 3 ? "#{run.first}-#{run.last}" : run.join(',') }.join(',')
     end
@@ -104,7 +120,14 @@ module RateCard
       end
     end
 
+    # A Symbol zone (:edas, :rdas) only ever comes from UPS rural mode, so it
+    # disambiguates from a real zone number without needing to check carrier
+    # or rural separately. USPS rural mode keeps integer zones, just against
+    # the rural chart instead of the normal one.
     def address_for(zone)
+      return Constants::Addresses::UPS_RURAL[zone] if zone.is_a?(Symbol)
+      return Constants::Addresses::USPS_RURAL_DAS[zone] if carrier == 'USPS' && rural?
+
       Constants::Addresses.for_carrier(carrier)[zone]
     end
 
@@ -136,7 +159,16 @@ module RateCard
     end
 
     def run_dir
-      Pathname.new(output_base).join("#{slug}_#{customer_id}_#{timestamp}")
+      Pathname.new(output_base).join("#{slug}_#{customer_id}_#{timestamp}#{rural_suffix}")
+    end
+
+    def rural_suffix
+      case rural
+      when true then '_rural'
+      when :edas, :rdas then "_#{rural}"
+      when :both then '_edas_rdas'
+      else ''
+      end
     end
 
     def validate!

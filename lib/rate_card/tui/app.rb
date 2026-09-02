@@ -24,7 +24,7 @@ module RateCard
 
       # No :token stage — see TokenPrompt for why it cannot live in the loop.
       STAGES = %i[
-        loading rate_mode carrier services zones unit weights package_type
+        loading rate_mode carrier rural services zones unit weights package_type
         rate_keys confirm fetching
       ].freeze
 
@@ -177,6 +177,7 @@ module RateCard
         case stage
         when :rate_mode    then rate_mode_field
         when :carrier      then carrier_field
+        when :rural        then rural_field
         when :services     then services_field
         when :zones        then zones_field
         when :unit         then unit_field
@@ -238,8 +239,43 @@ module RateCard
         )
       end
 
+      # Only USPS and UPS have a rural/DAS chart (Addresses::USPS_RURAL_DAS,
+      # Addresses::UPS_RURAL); every other carrier is decided :normal (nil)
+      # and skips this stage, same as any other single-answer stage.
+      def rural_field
+        return nil unless Constants::Carriers.rural_aware?(carrier)
+
+        choices = carrier == 'USPS' ? usps_rural_choices : ups_rural_choices
+        Fields::Select.new(label: 'Rural / DAS test mode', choices: choices,
+                           selected: choices.index { |_, v| v == @answers[:rural] } || 0)
+      end
+
+      def usps_rural_choices
+        [['Normal', false], ['Rural (DAS)', true]]
+      end
+
+      def ups_rural_choices
+        [['Normal', nil], ['EDAS', :edas], ['RDAS', :rdas], ['Both', :both]]
+      end
+
+      # UPS rural mode has no real zone choice - each surcharge type is a
+      # single fixed address - so it's decided here as the chosen surcharge
+      # symbol(s) and the zones stage is skipped rather than asked.
+      def ups_rural_zones
+        case @answers[:rural]
+        when :edas then [:edas]
+        when :rdas then [:rdas]
+        when :both then %i[edas rdas]
+        end
+      end
+
       def zones_field
-        available = Constants::Addresses.available_zones(carrier)
+        if carrier == 'UPS' && (decided = ups_rural_zones)
+          @answers[:zones] = decided
+          return nil
+        end
+
+        available = usps_rural? ? Constants::Addresses::USPS_RURAL_DAS.keys.sort : Constants::Addresses.available_zones(carrier)
         full = "#{available.first}-#{available.last}"
         answered = @answers[:zones]
 
@@ -253,6 +289,10 @@ module RateCard
             zones
           }
         )
+      end
+
+      def usps_rural?
+        carrier == 'USPS' && @answers[:rural] == true
       end
 
       # Weight is fixed per cubic tier, so asking for a display unit is
@@ -431,6 +471,7 @@ module RateCard
           weights: cubic ? [] : @answers[:weights],
           cubic_tiers: cubic ? @answers[:weights] : [],
           rate_mode: @answers[:rate_mode] || :weight,
+          rural: @answers[:rural],
           package_type: @answers[:package_type],
           rate_keys: @answers[:rate_keys],
           output_base: @output_base,
@@ -458,12 +499,19 @@ module RateCard
       # in the transcript above, but they arrived one at a time over eight
       # screens; this is the only place they can be read against each other.
       def recap_view
+        carrier_line = "  #{Theme.bold(carrier)}#{rural_recap} · #{@answers[:services].map(&:name).join(', ')}"
         [
-          "  #{Theme.bold(carrier)} · #{@answers[:services].map(&:name).join(', ')}",
+          carrier_line,
           "  zones #{RunSpec.compact_range(@answers[:zones])} · #{rows_recap} · #{@answers[:package_type]}",
           "  columns: #{@answers[:rate_keys].map { |k| RunSpec::RATE_KEY_LABELS.fetch(k) }.join(', ')}",
           "  #{Theme.bold(call_count.to_s)} rate calls against #{Theme.danger('production')}"
         ].join("\n")
+      end
+
+      def rural_recap
+        return '' if !@answers[:rural] || @answers[:rural].nil?
+
+        " (#{rural_label(@answers[:rural])})"
       end
 
       def rows_recap
@@ -500,8 +548,8 @@ module RateCard
       # transcript of the run stays on screen — the recap is then a summary of
       # what is already visible rather than the first chance to check it.
       def answered_line(stage, value)
-        label = { rate_mode: 'rate by', carrier: 'carrier', services: 'services', zones: 'zones',
-                  unit: 'unit', weights: 'weights', package_type: 'package',
+        label = { rate_mode: 'rate by', carrier: 'carrier', rural: 'rural / DAS', services: 'services',
+                  zones: 'zones', unit: 'unit', weights: 'weights', package_type: 'package',
                   rate_keys: 'columns' }[stage]
         label = 'cubic tiers' if stage == :weights && @answers[:rate_mode] == :cubic
         return nil if label.nil?
@@ -514,8 +562,18 @@ module RateCard
         when :services  then value.map(&:name).join(', ')
         when :zones     then RunSpec.compact_range(value)
         when :weights   then RunSpec.compact_range(value)
+        when :rural     then rural_label(value)
         when :rate_keys then value.map { |k| RunSpec::RATE_KEY_LABELS.fetch(k) }.join(', ')
         else value.to_s
+        end
+      end
+
+      def rural_label(value)
+        case value
+        when false, nil then 'normal'
+        when true       then 'rural (DAS)'
+        when :edas, :rdas then value.to_s.upcase
+        when :both      then 'EDAS + RDAS'
         end
       end
     end

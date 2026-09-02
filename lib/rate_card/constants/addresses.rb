@@ -72,6 +72,40 @@ module RateCard
 
       BY_CARRIER = { 'USPS' => USPS, 'UPS' => UPS, 'FedEx' => FEDEX, 'DHL' => DHL_ECOMMERCE, 'OSM' => OSM }.freeze
 
+      # Rural/remote-area surcharge test addresses. These aren't zone charts
+      # (rural surcharge eligibility is a property of the destination zip on
+      # a carrier's rural list, not something for_carrier's zone lookup
+      # models), so they live outside BY_CARRIER and are looked up directly
+      # by callers that need them.
+      #
+      # Ported from ../rate_table_builder/constants.rb. USPS_RURAL_DAS zones
+      # 4-8 were tagged 'maybe' or unverified in the source file - re-verify
+      # against USPS's rural lookup before relying on them for a real card.
+      USPS_RURAL_DAS = {
+        0 => { address1: '12078 W 4000 N', city: 'Bluebell', state: 'UT', postal_code: '84007', country: 'US' },
+        1 => { address1: '6074 N 4700 W', city: 'Bear River City', state: 'UT', postal_code: '84301', country: 'US' },
+        2 => { address1: '25670 Buffalo Run', city: 'Moran', state: 'WY', postal_code: '83013', country: 'US' },
+        3 => { address1: '17 Texs Loop', city: 'Alder', state: 'MT', postal_code: '59710', country: 'US' },
+        4 => { address1: '1250 153rd St SE', city: 'Norwich', state: 'ND', postal_code: '58768', country: 'US' },
+        5 => { address1: '103 Stonegate Ct', city: 'Gurdon', state: 'AR', postal_code: '71743', country: 'US' },
+        6 => { address1: '31 Edsel Rd', city: 'Webbville', state: 'KY', postal_code: '41180', country: 'US' },
+        7 => { address1: '295 Old Waterford Road', city: 'Littleton', state: 'NH', postal_code: '03561', country: 'US' },
+        8 => { address1: '77 Main Street', city: 'Mars Hill', state: 'ME', postal_code: '04758', country: 'US' }
+      }.freeze
+
+      # UPS has no per-zone rural chart - just one known address per DAS
+      # variant. EDAS = Extended Delivery Area Surcharge, RDAS = Remote
+      # Delivery Area Surcharge.
+      UPS_EDAS_EXCEPTION = { address1: '149 Pheasant Runn Road', city: 'Goshen', state: 'NH', postal_code: '03752',
+                              country: 'US' }.freeze
+
+      UPS_RDAS_EXCEPTION = { address1: '106 Yellow Hammer Rd', city: 'Tyner', state: 'NC', postal_code: '27980',
+                              country: 'US' }.freeze
+
+      # Looked up by surcharge-type symbol rather than zone, since UPS rural
+      # mode sweeps surcharge types instead of zones — see RunSpec#address_for.
+      UPS_RURAL = { edas: UPS_EDAS_EXCEPTION, rdas: UPS_RDAS_EXCEPTION }.freeze
+
       module_function
 
       # Raises rather than falling back. The old USPS default meant asking for

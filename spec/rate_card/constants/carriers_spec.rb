@@ -50,4 +50,13 @@ RSpec.describe RateCard::Constants::Carriers do
       expect(described_class.display_order).to include('USPS', 'FedEx')
     end
   end
+
+  describe '.rural_aware?' do
+    it 'is true for USPS and UPS, false for everything else' do
+      expect(described_class.rural_aware?('USPS')).to be(true)
+      expect(described_class.rural_aware?('UPS')).to be(true)
+      expect(described_class.rural_aware?('FedEx')).to be(false)
+      expect(described_class.rural_aware?('Nonesuch')).to be(false)
+    end
+  end
 end

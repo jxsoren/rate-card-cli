@@ -30,6 +30,11 @@ module RateCard
         'dhl' => 'DHL Express', 'dhl_ecommerce' => 'DHL', 'osm' => 'OSM', 'amazon' => 'Amazon'
       }.freeze
 
+      # Carriers with a rural/DAS surcharge test address in Constants::Addresses.
+      # Independent of zone-chart support - a carrier can have a verified zone
+      # chart and no rural chart at all.
+      RURAL_AWARE = %w[USPS UPS].freeze
+
       module_function
 
       # OTHER is only for a malformed entry with no code at all, so a service is
@@ -43,6 +48,10 @@ module RateCard
 
       def display_order
         DISPLAY_ORDER
+      end
+
+      def rural_aware?(carrier)
+        RURAL_AWARE.include?(carrier.to_s)
       end
     end
   end
