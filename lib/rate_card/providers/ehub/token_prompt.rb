@@ -17,15 +17,27 @@ module RateCard
       # Reading it here also means the terminal's own line editing handles the
       # paste, which is what makes it work.
       module TokenPrompt
+        # DEC private mode reset for bracketed paste. A crashed or Ctrl-C'd
+        # prior run can leave the TUI's bracketed paste mode on in the
+        # terminal (iTerm2 persists terminal modes across process launches
+        # within a pane, which is where this has actually been observed); the
+        # next plain `gets` here then reads the paste's literal \e[200~ /
+        # \e[201~ wrapper as part of the token. Harmless on a terminal that
+        # never turned bracketed paste on.
+        BRACKETED_PASTE_OFF = "\e[?2004l"
+        PASTE_START = "\e[200~"
+        PASTE_END = "\e[201~"
+
         module_function
 
         def read(ui:, io: $stdin)
           loop do
+            io.print(BRACKETED_PASTE_OFF) if io.tty?
             ui.prompt('eHub API token: ')
             raw = read_masked(io)
             return nil if raw.nil?
 
-            raw = raw.strip
+            raw = strip_paste_markers(raw).strip
             if raw.empty?
               ui.error('no token on that line — paste the token')
               next
@@ -48,6 +60,10 @@ module RateCard
           else
             io.gets
           end
+        end
+
+        def strip_paste_markers(raw)
+          raw.delete_prefix(PASTE_START).delete_suffix("#{PASTE_END}\n").delete_suffix(PASTE_END)
         end
       end
     end

@@ -56,4 +56,14 @@ RSpec.describe RateCard::Providers::EHub::TokenPrompt do
   it 'returns nil on EOF so the caller can cancel cleanly' do
     expect(described_class.read(ui: ui, io: StringIO.new(''))).to be_nil
   end
+
+  # A prior run that didn't shut down cleanly can leave the terminal in
+  # bracketed paste mode (observed on iTerm2, which persists that mode across
+  # process launches within a pane); the next paste then arrives wrapped in
+  # the terminal's own markers.
+  it 'strips a leftover bracketed-paste wrapper from a stuck terminal mode' do
+    io = StringIO.new("\e[200~#{token}\e[201~\n")
+
+    expect(described_class.read(ui: ui, io: io)).to eq(token)
+  end
 end
