@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe RateCard::ServiceCatalog do
+RSpec.describe RateCard::Providers::EHub::ServiceCatalog do
   let(:body) do
     { 'services' => [
       { 'service_id' => 1172, 'service_code' => 'GroundAdvantage',

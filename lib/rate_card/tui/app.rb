@@ -220,7 +220,7 @@ module RateCard
       # chart is dropped from the menu rather than offered and then refused
       # mid-run by Addresses.for_carrier.
       def selectable_carriers
-        carriers = ServiceCatalog.group_by_carrier(@services)
+        carriers = Providers::EHub::ServiceCatalog.group_by_carrier(@services)
                                  .keys
                                  .select { |carrier| Constants::Addresses.supported?(carrier) }
         return carriers & ['USPS'] if @answers[:rate_mode] == :cubic
@@ -339,7 +339,7 @@ module RateCard
       def start_loading
         client = @client_factory.call(@token)
         lambda do
-          services = ServiceCatalog.from_response(client.fetch_services)
+          services = Providers::EHub::ServiceCatalog.from_response(client.fetch_services)
           if services.empty?
             LoadFailed.new(NoServices.new('the API returned no services for this token'))
           elsif (rateable = with_supported_carrier(services)).empty?
