@@ -35,7 +35,7 @@ module RateCard
       attr_writer :notifier
 
       def initialize(token:, output_base:,
-                     client_factory: ->(tok) { Client.new(token: tok) })
+                     client_factory: ->(tok) { Providers::EHub::Client.new(token: tok) })
         @token = token
         @output_base = Pathname.new(output_base)
         @client_factory = client_factory
