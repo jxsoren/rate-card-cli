@@ -438,7 +438,7 @@ module RateCard
       end
 
       def identity
-        @identity ||= Token.decode(@token)
+        @identity ||= Providers::EHub::Token.decode(@token)
       end
 
       # ----------------------------------------------------------------- view

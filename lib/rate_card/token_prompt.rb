@@ -35,9 +35,9 @@ module RateCard
         end
 
         begin
-          Token.decode(raw)
+          Providers::EHub::Token.decode(raw)
           return raw
-        rescue Token::DecodeError => e
+        rescue Providers::EHub::Token::DecodeError => e
           ui.error("#{e.message} — paste the token again")
         end
       end

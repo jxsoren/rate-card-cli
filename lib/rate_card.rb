@@ -25,7 +25,7 @@ module RateCard
   class UnsupportedCarrier < Error; end
 end
 
-require_relative 'rate_card/token'
+require_relative 'rate_card/providers/ehub/token'
 require_relative 'rate_card/token_prompt'
 require_relative 'rate_card/service'
 require_relative 'rate_card/failure'

@@ -3,7 +3,7 @@
 require 'base64'
 require 'json'
 
-RSpec.describe RateCard::Token do
+RSpec.describe RateCard::Providers::EHub::Token do
   def jwt_for(payload)
     encode = ->(h) { Base64.urlsafe_encode64(JSON.generate(h), padding: false) }
     "#{encode.call({ alg: 'HS256' })}.#{encode.call(payload)}.signature"
@@ -63,14 +63,14 @@ RSpec.describe RateCard::Token do
       token = "header.#{Base64.urlsafe_encode64(JSON.generate([1, 2, 3]), padding: false)}.sig"
 
       expect { described_class.decode(token) }
-        .to raise_error(RateCard::Token::DecodeError, /not a JSON object/)
+        .to raise_error(RateCard::Providers::EHub::Token::DecodeError, /not a JSON object/)
     end
 
     it 'raises DecodeError when the payload is a bare JSON scalar' do
       token = "header.#{Base64.urlsafe_encode64('7', padding: false)}.sig"
 
       expect { described_class.decode(token) }
-        .to raise_error(RateCard::Token::DecodeError, /not a JSON object/)
+        .to raise_error(RateCard::Providers::EHub::Token::DecodeError, /not a JSON object/)
     end
 
     it 'decodes a Hash with no data.user nesting rather than raising' do
@@ -82,12 +82,12 @@ RSpec.describe RateCard::Token do
 
     it 'raises when the token does not have three segments' do
       expect { described_class.decode('not.ajwt') }
-        .to raise_error(RateCard::Token::DecodeError, /three segments/)
+        .to raise_error(RateCard::Providers::EHub::Token::DecodeError, /three segments/)
     end
 
     it 'raises when the payload segment is not valid base64 json' do
       expect { described_class.decode('header.@@@@.signature') }
-        .to raise_error(RateCard::Token::DecodeError, /does not look like an eHub API token/)
+        .to raise_error(RateCard::Providers::EHub::Token::DecodeError, /does not look like an eHub API token/)
     end
 
     it 'still decodes when the payload has no customer_id, naming the account by email' do
@@ -98,8 +98,8 @@ RSpec.describe RateCard::Token do
     end
 
     it 'raises on a nil or empty token' do
-      expect { described_class.decode('') }.to raise_error(RateCard::Token::DecodeError)
-      expect { described_class.decode(nil) }.to raise_error(RateCard::Token::DecodeError)
+      expect { described_class.decode('') }.to raise_error(RateCard::Providers::EHub::Token::DecodeError)
+      expect { described_class.decode(nil) }.to raise_error(RateCard::Providers::EHub::Token::DecodeError)
     end
   end
 end
