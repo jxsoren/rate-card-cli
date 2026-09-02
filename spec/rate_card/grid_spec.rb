@@ -199,6 +199,28 @@ RSpec.describe RateCard::Grid do
 
     expect(grid.failures.map { |f| [f.weight, f.zone] }).to eq([[1, 1], [1, 2], [2, 1], [2, 2]])
   end
+  # eHub answers these with an HTTP 201, so Client's status-code retry never
+  # sees them. Left alone, they show up as a cell that is nil on one run and
+  # priced on the next, for the exact same request.
+  it 'retries a call whose selected service reports a transient error, and keeps the retried value' do
+    attempts = Hash.new(0)
+    mutex = Mutex.new
+    client = FakeClient.new do |weight, _postal|
+      count = mutex.synchronize { attempts[weight] += 1 }
+      if count == 1
+        { 'service_rates' => [{ 'service_id' => 1172, 'rate' => nil,
+                                 'errors' => 'USPS received too many requests in test mode, please slow down and try again later' }] }
+      else
+        { 'service_rates' => [{ 'service_id' => 1172, 'rate' => weight * 1.0 }] }
+      end
+    end
+
+    grid = described_class.build(spec: spec_with(services: [ground], zones: [1], weights: [1]),
+                                 client: client, retry_sleeper: ->(_) {})
+
+    expect(grid.value(service_id: 1172, rate_key: :shipper_rate, weight: 1, zone: 1)).to eq(1.0)
+  end
+
   describe 'warnings' do
     # The docs are explicit that a carrier failure comes back as a 201 with a
     # populated warnings array, so a run can succeed and price nothing.

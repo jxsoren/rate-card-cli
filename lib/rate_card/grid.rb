@@ -12,9 +12,17 @@ module RateCard
   class Grid
     THREADS = 8
 
+    # eHub answers these as an HTTP 201 "success" with the per-service errors
+    # field describing a hiccup that clears on its own, so Client's status-code
+    # retry never sees them. Left alone, the exact same request prices a
+    # different random set of cells on every run.
+    TRANSIENT_ERROR_PATTERN = /too many requests|please try again|slow down/i
+    RETRY_BACKOFF = [0.5, 1.0].freeze
+
     # on_progress: called with no arguments after each completed call.
-    def self.build(spec:, client:, on_progress: nil)
-      new(spec).tap { |grid| grid.send(:fetch_all, client, on_progress) }
+    # retry_sleeper: injected so retry backoff is testable without waiting.
+    def self.build(spec:, client:, on_progress: nil, retry_sleeper: ->(seconds) { sleep(seconds) })
+      new(spec).tap { |grid| grid.send(:fetch_all, client, on_progress, retry_sleeper) }
     end
 
     attr_reader :spec
@@ -66,9 +74,9 @@ module RateCard
 
     private
 
-    def fetch_all(client, on_progress)
+    def fetch_all(client, on_progress, retry_sleeper)
       Parallel.each(cell_coordinates, in_threads: THREADS) do |weight, zone|
-        fetch_cell(client, weight, zone)
+        fetch_cell(client, weight, zone, retry_sleeper)
         @mutex.synchronize { on_progress&.call }
       end
     end
@@ -77,9 +85,9 @@ module RateCard
       spec.rows.product(spec.zones)
     end
 
-    def fetch_cell(client, weight, zone)
+    def fetch_cell(client, weight, zone, retry_sleeper)
       payload = Shipment.new(spec: spec, weight: weight, address: spec.address_for(zone)).payload
-      body = client.fetch_rates(payload)
+      body = fetch_with_transient_retry(client, payload, retry_sleeper)
       record_response(body, weight, zone)
       @mutex.synchronize { @succeeded += 1 }
     rescue Unauthorized
@@ -89,6 +97,24 @@ module RateCard
       @mutex.synchronize do
         @failures << Failure.new(weight: weight, zone: zone, message: e.message)
       end
+    end
+
+    def fetch_with_transient_retry(client, payload, retry_sleeper)
+      attempt = 0
+      loop do
+        body = client.fetch_rates(payload)
+        return body unless transient_error?(body) && attempt < RETRY_BACKOFF.length
+
+        retry_sleeper.call(RETRY_BACKOFF[attempt])
+        attempt += 1
+      end
+    end
+
+    # True when a selected service's errors field reads as a transient hiccup
+    # rather than a real problem with this request.
+    def transient_error?(body)
+      by_id = index_by_service_id(body)
+      spec.services.any? { |service| error_detail(by_id[service.id]) =~ TRANSIENT_ERROR_PATTERN }
     end
 
     def record_response(body, weight, zone)
