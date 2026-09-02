@@ -34,7 +34,7 @@ RSpec.describe RateCard::Runner do
   # Runner no longer fetches — TUI::App does, inside the event loop, so the bar
   # can be live — so a spec builds the grid itself and hands over the result.
   def report(spec, client)
-    grid = RateCard::Grid.build(spec: spec, client: client)
+    grid = RateCard::Grid.build(spec: spec, client: client, provider: RateCard::Providers::EHub::Provider.new)
     described_class.new(spec: spec, grid: grid, ui: ui)
   end
 

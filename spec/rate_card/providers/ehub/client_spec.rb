@@ -2,7 +2,7 @@
 
 require 'faraday'
 
-RSpec.describe RateCard::Client do
+RSpec.describe RateCard::Providers::EHub::Client do
   # Builds a client whose HTTP layer replays the given [status, body] pairs.
   def client_replaying(*responses, sleeps: [])
     calls = responses.dup

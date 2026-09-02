@@ -39,4 +39,19 @@ RSpec.describe RateCard::Service do
       expect(service(code: nil, name: nil).file_slug).not_to be_empty
     end
   end
+
+  describe '.group_by_carrier' do
+    it 'returns carrier => services in display order' do
+      services = [
+        service(id: 1172, carrier: 'USPS'),
+        service(id: 392, carrier: 'FedEx'),
+        service(id: 900, carrier: 'Other')
+      ]
+
+      grouped = described_class.group_by_carrier(services)
+
+      expect(grouped.keys).to eq(%w[USPS FedEx Other])
+      expect(grouped['USPS'].first.id).to eq(1172)
+    end
+  end
 end

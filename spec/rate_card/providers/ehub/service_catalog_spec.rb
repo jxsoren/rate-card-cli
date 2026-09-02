@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe RateCard::ServiceCatalog do
+RSpec.describe RateCard::Providers::EHub::ServiceCatalog do
   let(:body) do
     { 'services' => [
       { 'service_id' => 1172, 'service_code' => 'GroundAdvantage',
@@ -90,15 +90,6 @@ RSpec.describe RateCard::ServiceCatalog do
 
     it 'returns an empty array when services is missing' do
       expect(described_class.from_response({})).to eq([])
-    end
-  end
-
-  describe '.group_by_carrier' do
-    it 'returns carrier => services in display order' do
-      grouped = described_class.group_by_carrier(described_class.from_response(body))
-
-      expect(grouped.keys).to eq(%w[USPS FedEx Other])
-      expect(grouped['USPS'].first.id).to eq(1172)
     end
   end
 end

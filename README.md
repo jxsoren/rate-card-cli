@@ -84,22 +84,25 @@ bundle exec exe/rate-card
 
 No flags needed — the wizard asks for everything:
 
-1. **eHub API token** — pasted, masked. Decoded so you can confirm the account before the run
+1. **Provider** — announced, not yet asked: eHub is the only one built so
+   far. Printed before the token prompt so the run says what it targets
+   before a production credential is pasted into it.
+2. **eHub API token** — pasted, masked. Decoded so you can confirm the account before the run
    starts. Never written to disk. A malformed token re-prompts rather than ending the run.
-2. **Rate by** — Weight or Cubic dimensions. Only asked when the token has USPS
+3. **Rate by** — Weight or Cubic dimensions. Only asked when the token has USPS
    services, since USPS cubic pricing (Ground Advantage Cubic, Priority Mail Cubic) is
    priced by which of ten official volume tiers the package falls into, not by weight.
    Choosing Cubic restricts the carrier to USPS and replaces the weight-unit and
    weight-range questions with a multi-select of the ten tiers. Choosing Cubic does not check
    that the service you go on to pick is actually cubic-priced — you're responsible for
    selecting a cubic-rated USPS service (e.g. "USPS Ground Advantage Cubic").
-3. **Carrier**, then **services** — the list comes from the customer's own service catalogue
+4. **Carrier**, then **services** — the list comes from the customer's own service catalogue
    (`GET /api/v2/services?category=shipping`), so it is exactly what that customer has enabled,
    including services that would not quote at a single probe weight.
-4. **Zones** (`1-8`, or `1,3,5`); then, in weight mode, **weight unit** (`oz`/`lbs`) and
+5. **Zones** (`1-8`, or `1,3,5`); then, in weight mode, **weight unit** (`oz`/`lbs`) and
    **weight range** — or, in cubic mode, the **cubic tiers** to include; then
    **package type**, **rate columns** (shipper rate, meter rate).
-5. A recap of every answer, with the call count, and a **Run** / **Back** choice. It opens on
+6. A recap of every answer, with the call count, and a **Run** / **Back** choice. It opens on
    **Back**, so a stray enter carried over from the previous question goes back rather than
    spending 128 production calls; `ctrl-c` abandons the session outright.
 
@@ -217,11 +220,13 @@ So the fetch/assemble/render engine is testable with no prompting and no network
 | File | Responsibility |
 | --- | --- |
 | `exe/rate-card` | Entrypoint: flags → wizard → runner. Every error becomes one clean line |
-| `client.rb` | The only network seam. Every outcome becomes a Hash, `Unauthorized`, or `RequestFailed` |
-| `token.rb` | Decodes the JWT payload to name the account. Does not verify the signature |
-| `service_catalog.rb` | Service catalogue response → `Service` objects, grouped by carrier |
+| `providers.rb` | Registry mapping a provider key to the object that builds it |
+| `providers/ehub/provider.rb` | Implements the provider interface for eHub: auth, catalogue parsing, request/response shape |
+| `providers/ehub/client.rb` | The only network seam. Every outcome becomes a Hash, `Unauthorized`, or `RequestFailed` |
+| `providers/ehub/token.rb` | Decodes the JWT payload to name the account. Does not verify the signature |
+| `providers/ehub/service_catalog.rb` | Service catalogue response → `Service` objects, grouped by carrier |
 | `run_spec.rb` | The validated inputs for one run |
-| `shipment.rb` | One (weight, zone) request payload |
+| `providers/ehub/shipment.rb` | One (weight, zone) request payload |
 | `grid.rb` | Fans out the calls, assembles cells and failures |
 | `csv_writer.rb` / `table_renderer.rb` | Peers reading the same `Grid`, so files and terminal cannot disagree |
 | `ui.rb` | Every byte the tool prints |

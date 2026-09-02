@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Stands in for RateCard::Client with no network. Configure per-weight-and-zone
+# Stands in for RateCard::Providers::EHub::Client with no network. Configure per-weight-and-zone
 # rate behaviour with the block: either a service_rates array or an exception to
 # raise. `services:` is what fetch_services returns (or raises), for the wizard's
 # discovery call.

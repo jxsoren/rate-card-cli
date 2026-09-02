@@ -2,7 +2,7 @@
 
 require 'pathname'
 
-RSpec.describe RateCard::Shipment do
+RSpec.describe RateCard::Providers::EHub::Shipment do
   def spec_for(unit)
     RateCard::RunSpec.new(
       token: 'tok', customer_name: 'Acme', customer_id: 1,
@@ -43,7 +43,7 @@ RSpec.describe RateCard::Shipment do
     customs = payload[:shipment][:parcels].first[:customs_data]
 
     expect(customs[:content_type]).to eq('merchandise')
-    expect(customs[:value]).to eq(RateCard::Shipment::ITEM_VALUE)
+    expect(customs[:value]).to eq(RateCard::Providers::EHub::Shipment::ITEM_VALUE)
   end
 
   it 'sends exactly one parcel with the selected package type' do

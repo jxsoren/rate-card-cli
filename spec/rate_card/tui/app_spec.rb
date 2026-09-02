@@ -31,6 +31,7 @@ RSpec.describe RateCard::TUI::App do
 
   def app(output_base: Pathname.new('/tmp/rc'), client: catalog_client, tok: token)
     described_class.new(token: tok, output_base: output_base,
+                        provider: RateCard::Providers::EHub::Provider.new,
                         client_factory: ->(_token) { client })
   end
 

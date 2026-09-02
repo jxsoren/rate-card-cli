@@ -34,10 +34,11 @@ module RateCard
       # the only way a worker thread can get a message onto the event loop.
       attr_writer :notifier
 
-      def initialize(token:, output_base:,
-                     client_factory: ->(tok) { Client.new(token: tok) })
+      def initialize(token:, output_base:, provider:,
+                     client_factory: ->(tok) { provider.client(tok) })
         @token = token
         @output_base = Pathname.new(output_base)
+        @provider = provider
         @client_factory = client_factory
 
         @stage = :loading
@@ -220,7 +221,7 @@ module RateCard
       # chart is dropped from the menu rather than offered and then refused
       # mid-run by Addresses.for_carrier.
       def selectable_carriers
-        carriers = ServiceCatalog.group_by_carrier(@services)
+        carriers = Service.group_by_carrier(@services)
                                  .keys
                                  .select { |carrier| Constants::Addresses.supported?(carrier) }
         return carriers & ['USPS'] if @answers[:rate_mode] == :cubic
@@ -339,7 +340,7 @@ module RateCard
       def start_loading
         client = @client_factory.call(@token)
         lambda do
-          services = ServiceCatalog.from_response(client.fetch_services)
+          services = @provider.parse_services(client.fetch_services)
           if services.empty?
             LoadFailed.new(NoServices.new('the API returned no services for this token'))
           elsif (rateable = with_supported_carrier(services)).empty?
@@ -384,12 +385,13 @@ module RateCard
         client = @client_factory.call(@token)
         notifier = @notifier
         spec = @spec
+        provider = @provider
 
         lambda do
           completed = 0
           failed = 0
           mutex = Mutex.new
-          grid = Grid.build(spec: spec, client: client, on_progress: lambda {
+          grid = Grid.build(spec: spec, client: client, provider: provider, on_progress: lambda {
             mutex.synchronize { completed += 1 }
             notifier&.send(ProgressAdvanced.new(completed: completed, failed: failed))
           })
@@ -438,7 +440,7 @@ module RateCard
       end
 
       def identity
-        @identity ||= Token.decode(@token)
+        @identity ||= @provider.identify(@token)
       end
 
       # ----------------------------------------------------------------- view
