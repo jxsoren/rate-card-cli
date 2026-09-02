@@ -26,7 +26,7 @@ module RateCard
 end
 
 require_relative 'rate_card/providers/ehub/token'
-require_relative 'rate_card/token_prompt'
+require_relative 'rate_card/providers/ehub/token_prompt'
 require_relative 'rate_card/service'
 require_relative 'rate_card/failure'
 require_relative 'rate_card/constants/carriers'

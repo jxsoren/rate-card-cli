@@ -51,7 +51,7 @@ ui.banner
 # Read before the TUI starts. bubbletea-ruby 0.1.4 drops all but the first
 # character of a pasted burst, and the token is the one answer that is always
 # pasted; out here the terminal's own line editing handles it. See TokenPrompt.
-token = RateCard::TokenPrompt.read(ui: ui)
+token = RateCard::Providers::EHub::TokenPrompt.read(ui: ui)
 if token.nil?
   ui.info('Cancelled — nothing was built.')
   exit 0

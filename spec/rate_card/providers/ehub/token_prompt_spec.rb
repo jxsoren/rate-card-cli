@@ -3,7 +3,7 @@
 require 'base64'
 require 'stringio'
 
-RSpec.describe RateCard::TokenPrompt do
+RSpec.describe RateCard::Providers::EHub::TokenPrompt do
   def jwt_for(customer_id, email)
     encode = ->(h) { Base64.urlsafe_encode64(JSON.generate(h), padding: false) }
     "#{encode.call({ alg: 'none' })}." \
