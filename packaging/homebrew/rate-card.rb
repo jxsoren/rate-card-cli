@@ -13,8 +13,8 @@
 class RateCard < Formula
   desc "Interactive CLI that builds a shipping rate card from the eHub API"
   homepage "https://github.com/jxsoren/rate-card-cli"
-  url "https://rubygems.org/downloads/rate-card-0.1.3.gem"
-  sha256 "9a5f021fad92dcb9f10fea3355187221ad27d54b2d9d9bc836e3ee8d75afc945"
+  url "https://rubygems.org/downloads/rate-card-0.1.4.gem"
+  sha256 "48af7299684b24fedd7f708ab1d5733f09310dda4b800bbee991741e6607a51f"
   license "MIT"
 
   depends_on "ruby"
