@@ -22,7 +22,8 @@ if gem list --remote --exact rate-card | grep -q "(\(.*[( ]\)\?${VERSION}"; then
 fi
 
 echo "==> Testing"
-bundle exec rspec
+# NO_COLOR must come from the environment, not spec_helper: see the comment there.
+NO_COLOR=1 bundle exec rspec
 
 echo "==> Building ${GEM}"
 rm -f "$GEM"

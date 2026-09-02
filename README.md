@@ -31,8 +31,12 @@ To upgrade: `brew upgrade rate-card`, or `gem update rate-card`.
 ```bash
 bundle install
 bundle exec exe/rate-card
-bundle exec rspec
+NO_COLOR=1 bundle exec rspec
 ```
+
+`NO_COLOR=1` is required when running the specs from a terminal — five specs assert on
+uncoloured rendered output, and lipgloss colours whenever stdout is a tty. See the comment
+in `spec/spec_helper.rb`.
 
 Ruby 3.3.4 (pinned in `.ruby-version`); the gemspec floor is 3.2, and Homebrew currently
 builds against Ruby 4.0.
@@ -182,7 +186,7 @@ A carrier failure is not a failed call: eHub answers 201 and puts the reason in 
 ## Tests
 
 ```bash
-bundle exec rspec
+NO_COLOR=1 bundle exec rspec
 ```
 
 **No test contacts production** — `Client` is the only network seam, and specs stub it via
