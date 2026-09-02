@@ -86,7 +86,7 @@ module RateCard
     end
 
     def fetch_cell(client, weight, zone, retry_sleeper)
-      payload = Shipment.new(spec: spec, weight: weight, address: spec.address_for(zone)).payload
+      payload = Providers::EHub::Shipment.new(spec: spec, weight: weight, address: spec.address_for(zone)).payload
       body = fetch_with_transient_retry(client, payload, retry_sleeper)
       record_response(body, weight, zone)
       @mutex.synchronize { @succeeded += 1 }
