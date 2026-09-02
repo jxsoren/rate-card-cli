@@ -48,11 +48,13 @@ end
 ui = RateCard::UI.new(io: $stdout)
 ui.banner
 
+provider = RateCard::Providers.build(RateCard::ProviderPrompt.read(ui: ui))
+
 # Read before the TUI starts. bubbletea-ruby 0.1.4 drops all but the first
-# character of a pasted burst, and the token is the one answer that is always
-# pasted; out here the terminal's own line editing handles it. See TokenPrompt.
-token = RateCard::Providers::EHub::TokenPrompt.read(ui: ui)
-if token.nil?
+# character of a pasted burst, and the credential is the one answer that is
+# always pasted; out here the terminal's own line editing handles it.
+credential = provider.read_credential(ui: ui)
+if credential.nil?
   ui.info('Cancelled — nothing was built.')
   exit 0
 end
@@ -60,7 +62,7 @@ end
 # The TUI owns the terminal from here until it quits: the catalogue lookup, the
 # remaining answers and the fetch all happen inside its event loop. Reporting
 # happens after, on a terminal that has been handed back.
-app = RateCard::TUI::App.new(token: token, output_base: options[:output_base])
+app = RateCard::TUI::App.new(token: credential, output_base: options[:output_base], provider: provider)
 runner = Bubbletea::Runner.new(app)
 app.notifier = runner
 
