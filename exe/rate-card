@@ -14,6 +14,8 @@ options = { output_base: DEFAULT_OUTPUT_BASE, show_table: true }
 parser = OptionParser.new do |opts|
   opts.banner = 'Usage: rate-card [options]'
   opts.separator ''
+  # eHub is the only registered provider today (see RateCard::Providers) — this
+  # line should name the provider generically once a second one exists.
   opts.separator 'Generates a shipping rate card from the eHub production API.'
   opts.separator 'All rate-card inputs are collected interactively.'
   opts.separator ''
@@ -48,7 +50,8 @@ end
 ui = RateCard::UI.new(io: $stdout)
 ui.banner
 
-provider = RateCard::Providers.build(RateCard::ProviderPrompt.read(ui: ui))
+provider_key = RateCard::ProviderPrompt.read(ui: ui)
+provider = RateCard::Providers.build(provider_key)
 
 # Read before the TUI starts. bubbletea-ruby 0.1.4 drops all but the first
 # character of a pasted burst, and the credential is the one answer that is
@@ -84,6 +87,8 @@ end
 case app.error
 when nil then nil
 when RateCard::Unauthorized
+  # Wording is eHub-specific — fine while eHub is the only registered provider;
+  # generalize once a second one exists.
   ui.error('Production rejected that token. Check it is a current eHub API token.')
   exit 1
 when RateCard::NoServices
