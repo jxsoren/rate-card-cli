@@ -1,60 +1,151 @@
 #!/usr/bin/env bash
-# Release rate-card: build the gem, push it to RubyGems, then update the
-# Homebrew formula to match.
+# Release rate-card: test, build, publish the gem, then update and push the
+# Homebrew formula so `brew install jxsoren/tools/rate-card` serves the new
+# version.
 #
-# The version comes from lib/rate_card/version.rb -- bump that first, commit it,
-# then run this. The formula's sha256 must be the checksum of the exact .gem file
-# that was pushed, which is why the two steps live in one script.
+# The only input is the version in lib/rate_card/version.rb. Bump it, commit,
+# then run this.
 #
-# Usage: bin/release [path-to-tap-checkout]
-#   Defaults to the tap Homebrew already has cloned, if any.
+# Usage: bin/release [--dry-run] [path-to-tap-checkout]
+#
+#   --dry-run   Do everything except the two publishing steps (gem push and the
+#               tap push). Leaves the built .gem and an updated formula in the
+#               working tree so you can inspect exactly what would ship.
+#
+# The tap checkout defaults to ~/homebrew-tools. It is deliberately NOT
+# Homebrew's own Library/Taps/jxsoren/homebrew-tools: brew manages that clone
+# and resets it, so committing there loses work.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+DRY_RUN=false
+TAP=""
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN=true ;;
+    -*) echo "unknown flag: $arg" >&2; exit 1 ;;
+    *) TAP=$arg ;;
+  esac
+done
+TAP=${TAP:-"$HOME/homebrew-tools"}
+
 VERSION=$(ruby -r ./lib/rate_card/version -e 'print RateCard::VERSION')
 GEM="rate-card-${VERSION}.gem"
-TAP=${1:-"$(brew --repository 2>/dev/null)/Library/Taps/jxsoren/homebrew-tools"}
+TAG="v${VERSION}"
+
+say() { printf '==> %s\n' "$1"; }
+die() { printf 'error: %s\n' "$1" >&2; exit 1; }
+
+# ---------------------------------------------------------------- preflight
+# All of it before anything is published, so a preventable problem costs
+# nothing. A release is not reversible: RubyGems will not let a version be
+# re-pushed, even after a yank.
 
 if gem list --remote --exact rate-card | grep -q "(\(.*[( ]\)\?${VERSION}"; then
-  echo "rate-card ${VERSION} is already on RubyGems. Bump lib/rate_card/version.rb first." >&2
-  exit 1
+  die "rate-card ${VERSION} is already on RubyGems. Bump lib/rate_card/version.rb first."
 fi
 
-echo "==> Testing"
+# A dirty tree means the released gem does not correspond to any commit, so
+# there is no way to know later what shipped.
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+  die "uncommitted changes. Commit them first so ${TAG} names an exact tree."
+fi
+
+if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+  die "tag ${TAG} already exists."
+fi
+
+[ -d "$TAP/.git" ] || die "no tap checkout at ${TAP}. Clone it: gh repo clone jxsoren/homebrew-tools ${TAP}"
+[ -d "$TAP/Formula" ] || die "${TAP} has no Formula/ directory — is it the right repo?"
+
+# A stale tap checkout would be committed on top of someone else's change.
+git -C "$TAP" fetch --quiet origin
+if [ -n "$(git -C "$TAP" status --porcelain)" ]; then
+  die "${TAP} has uncommitted changes. Clean it first."
+fi
+if [ -n "$(git -C "$TAP" log --oneline @{u}..HEAD 2>/dev/null)" ]; then
+  die "${TAP} has unpushed commits. Push or reset them first."
+fi
+git -C "$TAP" merge --ff-only @{u} --quiet 2>/dev/null || true
+
+$DRY_RUN && say "DRY RUN — nothing will be published"
+say "Releasing ${VERSION} (tap: ${TAP})"
+
+# ---------------------------------------------------------------- build
+say "Testing"
 # NO_COLOR must come from the environment, not spec_helper: see the comment there.
 NO_COLOR=1 bundle exec rspec
 
-echo "==> Building ${GEM}"
+say "Building ${GEM}"
 rm -f "$GEM"
 gem build rate-card.gemspec
 
-echo "==> Pushing to RubyGems (expect an MFA prompt)"
-gem push "$GEM"
+# ---------------------------------------------------------------- publish
+# The checksum cannot be known before the file exists, and the formula must
+# carry the checksum of the exact file users download -- so the gem is pushed
+# first and the formula follows. If anything below fails, the gem is already
+# public: re-run the formula steps by hand rather than bumping the version.
+if $DRY_RUN; then
+  say "Skipping gem push"
+else
+  say "Pushing to RubyGems (expect an MFA prompt)"
+  gem push "$GEM"
+fi
 
 SHA=$(shasum -a 256 "$GEM" | cut -d' ' -f1)
-echo "==> Gem ${VERSION} sha256 ${SHA}"
+say "sha256 ${SHA}"
 
-if [ ! -d "$TAP/Formula" ]; then
-  echo "No tap checkout at ${TAP}; skipping the formula update." >&2
-  echo "Update url/sha256 in packaging/homebrew/rate-card.rb by hand and copy it across." >&2
+say "Updating the formula"
+# Anchored to the formula's own two fields. Fails loudly rather than silently
+# editing the wrong line if the formula is ever restructured.
+grep -q '^  url "' packaging/homebrew/rate-card.rb || die "no url line in the formula"
+grep -q '^  sha256 "' packaging/homebrew/rate-card.rb || die "no sha256 line in the formula"
+sed -i '' \
+  -e "s|^  url \".*\"|  url \"https://rubygems.org/downloads/${GEM}\"|" \
+  -e "s|^  sha256 \".*\"|  sha256 \"${SHA}\"|" \
+  packaging/homebrew/rate-card.rb
+
+ruby -c packaging/homebrew/rate-card.rb >/dev/null || die "the formula is no longer valid Ruby"
+
+if $DRY_RUN; then
+  say "Skipping commits, tag and tap push"
+  cat <<MSG
+
+Dry run finished. Nothing was published.
+
+Built:   ${GEM}
+Formula: packaging/homebrew/rate-card.rb (updated in place, uncommitted)
+
+Inspect it, then revert with:
+  git checkout packaging/homebrew/rate-card.rb && rm -f ${GEM}
+MSG
   exit 0
 fi
 
-echo "==> Updating the formula"
-sed -i '' \
-  -e "s|url \".*\"|url \"https://rubygems.org/downloads/${GEM}\"|" \
-  -e "s|sha256 \".*\"|sha256 \"${SHA}\"|" \
-  packaging/homebrew/rate-card.rb
+say "Committing and tagging"
+git add packaging/homebrew/rate-card.rb
+git commit --quiet -m "build: rate-card ${VERSION}"
+git tag -a "$TAG" -m "rate-card ${VERSION}"
+git push --quiet origin HEAD "$TAG"
 
+say "Publishing the formula to the tap"
 cp packaging/homebrew/rate-card.rb "$TAP/Formula/rate-card.rb"
+git -C "$TAP" add Formula/rate-card.rb
+git -C "$TAP" commit --quiet -m "rate-card ${VERSION}"
+git -C "$TAP" push --quiet
 
 cat <<MSG
 
-Done. rate-card ${VERSION} is on RubyGems and the formula is updated.
+Done. rate-card ${VERSION} is live.
 
-Still to do by hand:
-  1. Commit packaging/homebrew/rate-card.rb here.
-  2. In ${TAP}: commit and push Formula/rate-card.rb.
-  3. Verify: brew uninstall rate-card && brew install jxsoren/tools/rate-card
+  gem:     https://rubygems.org/gems/rate-card/versions/${VERSION}
+  tag:     ${TAG}
+  install: brew install jxsoren/tools/rate-card
+
+Users on an older version upgrade with:
+  brew update && brew upgrade rate-card
+
+Verify this release end to end:
+  brew uninstall rate-card && brew untap jxsoren/tools && brew install jxsoren/tools/rate-card
 MSG
