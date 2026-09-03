@@ -61,6 +61,7 @@ module RateCard
         @queued_specs = []
         @queued_scenarios = []
         @scenario = 1
+        @fresh_scenario_start = false
         @log << { stage: :scenario_header, line: scenario_header_line(@scenario) }
       end
 
@@ -140,6 +141,7 @@ module RateCard
       def record(stage, value)
         @answers[stage] = value
         @log << { stage: stage, line: answered_line(stage, value) }
+        @fresh_scenario_start = false
       end
 
       def advance
@@ -163,6 +165,7 @@ module RateCard
       # they were given against a choice that may be about to change.
       def retreat
         return confirm_back if @stage == :confirm
+        return cancel_fresh_scenario if @fresh_scenario_start
 
         index = STAGES.index(@stage)
         loop do
@@ -190,6 +193,18 @@ module RateCard
         nil
       end
 
+      # Esc on the very first field of a scenario just started via "Yes, add
+      # another" — nothing has been answered yet for it, so there is nothing
+      # to walk back through. Treated as if "No" had been chosen instead: the
+      # new scenario is abandoned and the queue (already holding the prior
+      # scenario, committed by #confirm_or_queue) goes straight to confirm.
+      def cancel_fresh_scenario
+        @fresh_scenario_start = false
+        @log.pop if @log.last && @log.last[:stage] == :scenario_header
+        @scenario -= 1
+        advance_to_confirm
+      end
+
       # add_another is now asked as soon as every field is filled in, before
       # the run is ever confirmed. Either choice queues the just-answered
       # scenario. Yes clears @answers and jumps back to the wizard's first
@@ -201,6 +216,7 @@ module RateCard
 
         @scenario += 1
         @log << { stage: :scenario_header, line: scenario_header_line(@scenario) }
+        @fresh_scenario_start = true
 
         @stage = STAGES.first
         loop do

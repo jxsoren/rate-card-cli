@@ -725,6 +725,18 @@ RSpec.describe RateCard::TUI::App do
       expect(model.instance_variable_get(:@queued_specs).length).to eq(1)
     end
 
+    it 'cancels an accidentally-started second scenario on Esc from its first field, returning to confirm' do
+      model = answer_happy_path(start)
+      press(model, Keys.enter) # Yes, add another -> scenario 2's first field (Rate by)
+      expect(model.view).to include('Rate by')
+
+      press(model, Keys.esc) # accidental Yes undone -> confirm for the queued scenario 1
+
+      expect(model.view).to include('Run this rate card?')
+      expect(model.instance_variable_get(:@queued_specs).length).to eq(1)
+      expect(model.instance_variable_get(:@scenario)).to eq(1)
+    end
+
     it "keeps the prior scenario's transcript visible and adds a queued summary line" do
       model = answer_happy_path(start)
       press(model, Keys.enter) # Yes
