@@ -358,7 +358,7 @@ module RateCard
       def rural_field
         return nil unless Constants::Carriers.rural_aware?(carrier)
 
-        choices = [['Standard', false], ['Rural (DAS)', true]]
+        choices = [['Standard', false], ['Rural/DAS', true]]
         Fields::Select.new(label: 'Address Type', choices: choices,
                            selected: choices.index { |_, v| v == @answers[:rural] } || 0)
       end

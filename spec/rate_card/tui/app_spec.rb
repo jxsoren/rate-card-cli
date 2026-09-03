@@ -547,7 +547,7 @@ RSpec.describe RateCard::TUI::App do
       model = start
       press(model, Keys.enter)             # rate by: weight
       press(model, Keys.enter)             # carrier: usps
-      press(model, Keys.down, Keys.enter)  # rural: Rural (DAS)
+      press(model, Keys.down, Keys.enter)  # rural: Rural/DAS
       press(model, Keys.space, Keys.enter) # services
       press(model, Keys.enter)             # zones: default 1-8
       press(model, Keys.enter)             # unit
@@ -574,7 +574,7 @@ RSpec.describe RateCard::TUI::App do
       model = start(client: FakeClient.new(services: ups_catalog))
       press(model, Keys.enter)            # rate by: weight
       press(model, Keys.down, Keys.enter) # carrier: ups
-      press(model, Keys.down, Keys.enter) # rural: Rural (DAS)
+      press(model, Keys.down, Keys.enter) # rural: Rural/DAS
 
       expect(model.view).not_to include('Zones')
       expect(model.view).to include('Surcharge types')
@@ -586,7 +586,7 @@ RSpec.describe RateCard::TUI::App do
       model = start(client: FakeClient.new(services: ups_catalog))
       press(model, Keys.enter)                        # rate by: weight
       press(model, Keys.down, Keys.enter)              # carrier: ups
-      press(model, Keys.down, Keys.enter)              # rural: Rural (DAS)
+      press(model, Keys.down, Keys.enter)              # rural: Rural/DAS
       press(model, Keys.down, Keys.space, Keys.enter)  # surcharge types: uncheck RDAS, keep EDAS
       press(model, Keys.space, Keys.enter)             # services
       press(model, Keys.enter)                         # unit
@@ -605,7 +605,7 @@ RSpec.describe RateCard::TUI::App do
       model = start(client: FakeClient.new(services: ups_catalog))
       press(model, Keys.enter)             # rate by: weight
       press(model, Keys.down, Keys.enter)  # carrier: ups
-      press(model, Keys.down, Keys.enter)  # rural: Rural (DAS)
+      press(model, Keys.down, Keys.enter)  # rural: Rural/DAS
       press(model, Keys.enter)             # surcharge types: both pre-ticked
       press(model, Keys.space, Keys.enter) # services
       press(model, Keys.enter)             # unit
@@ -624,7 +624,7 @@ RSpec.describe RateCard::TUI::App do
       model = start(client: FakeClient.new(services: ups_catalog))
       press(model, Keys.enter)             # rate by: weight
       press(model, Keys.down, Keys.enter)  # carrier: ups
-      press(model, Keys.down, Keys.enter)  # rural: Rural (DAS)
+      press(model, Keys.down, Keys.enter)  # rural: Rural/DAS
       press(model, Keys.enter)             # surcharge types: both pre-ticked
       press(model, Keys.space, Keys.enter) # services
       press(model, Keys.enter)             # unit
@@ -646,7 +646,7 @@ RSpec.describe RateCard::TUI::App do
       model = start(client: client)
       press(model, Keys.enter)             # rate by: weight
       press(model, Keys.down, Keys.enter)  # carrier: ups
-      press(model, Keys.down, Keys.enter)  # rural: Rural (DAS)
+      press(model, Keys.down, Keys.enter)  # rural: Rural/DAS
       press(model, Keys.enter)             # surcharge types: both pre-ticked
       press(model, Keys.space, Keys.enter) # services
       press(model, Keys.enter)             # unit
