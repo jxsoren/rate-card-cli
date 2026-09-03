@@ -39,12 +39,17 @@ module RateCard
       # chart and no rural chart at all.
       RURAL_AWARE = %w[USPS UPS].freeze
 
-      # Carriers with no entry in Addresses::BY_CARRIER — their zone chart is
-      # fetched live per run via Providers::EHub::Client#fetch_zone_addresses
+      # Carriers with no entry in Addresses::BY_CARRIER — their zone chart would
+      # be fetched live per run via Providers::EHub::Client#fetch_zone_addresses
       # instead of read from a hand-verified constant. See
       # 2026-09-03-dynamic-zone-addresses-design.md. OLX is deliberately not
       # here — no live OLX rating API exists in ehub.
-      LIVE_CHART = %w[CDL GLS SpeedX UniUni Veho Dragonfly].freeze
+      #
+      # Disabled for now: the zone_addresses endpoint does not exist yet in
+      # ehub-api, so these carriers report as unsupported (like any other
+      # carrier with no chart) rather than attempting a call that always 404s.
+      # Restore this list once the endpoint ships.
+      LIVE_CHART = [].freeze
 
       # Carriers with an international destination in Constants::Addresses
       # (USPS_CANADA_ORIGINS/USPS_CANADA_DESTINATION today). Kept explicit

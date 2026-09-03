@@ -70,7 +70,9 @@ RSpec.describe RateCard::Constants::Carriers do
   end
 
   describe '.live_chart?' do
-    it 'is true for the 6 live-chart carriers' do
+    # Disabled at the source (LIVE_CHART is empty) until the zone_addresses
+    # endpoint exists in ehub-api — see Carriers::LIVE_CHART.
+    xit 'is true for the 6 live-chart carriers' do
       %w[CDL GLS SpeedX UniUni Veho Dragonfly].each do |carrier|
         expect(described_class.live_chart?(carrier)).to be(true)
       end

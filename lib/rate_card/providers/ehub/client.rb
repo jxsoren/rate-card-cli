@@ -16,6 +16,10 @@ module RateCard
       # full of blank cells instead of one clear error — do not do that.
       class Client
         BASE_URL = 'https://api.ehub.com'
+        # Zone-addresses defaults to the local server that has the fix in
+        # progress, while rates/services stay on production. Override with
+        # RATE_CARD_ZONE_ADDRESSES_URL (e.g. back to BASE_URL once the fix ships).
+        ZONE_ADDRESSES_BASE_URL = ENV.fetch('RATE_CARD_ZONE_ADDRESSES_URL', 'http://localhost:9000')
         # No trailing slash: that is the documented path, and a trailing slash would
         # rely on a redirect — which can drop the POST body.
         RATES_PATH = '/api/v2/rates'
@@ -43,7 +47,8 @@ module RateCard
           @token = token
           @stubs = stubs
           @sleeper = sleeper
-          @connection = build_connection
+          @connection = build_connection(BASE_URL)
+          @zone_addresses_connection = ZONE_ADDRESSES_BASE_URL == BASE_URL ? @connection : build_connection(ZONE_ADDRESSES_BASE_URL)
         end
 
         # Returns the parsed response body as a Hash.
@@ -55,7 +60,7 @@ module RateCard
         # Discovery uses this rather than a rate call: it costs nothing, and it lists
         # services that would not have quoted at the single probe weight and zone.
         def fetch_services
-          request('service list call') { get(SERVICES_PATH, category: SERVICES_CATEGORY) }
+          request('service list call') { get(SERVICES_PATH, { category: SERVICES_CATEGORY }) }
         end
 
         # Returns the parsed { "zones" => { "1" => {address1:, city:, ...}, ... } }
@@ -64,7 +69,9 @@ module RateCard
         # means the server resolves the origin from account configuration.
         def fetch_zone_addresses(service_id, from_postal_code: nil)
           params = from_postal_code ? { from_postal_code: from_postal_code } : {}
-          request('zone addresses call') { get(format(ZONE_ADDRESSES_PATH, service_id: service_id), params) }
+          request('zone addresses call') do
+            get(format(ZONE_ADDRESSES_PATH, service_id: service_id), params, connection: @zone_addresses_connection)
+          end
         end
 
         private
@@ -99,8 +106,8 @@ module RateCard
           raise RequestFailed, "rate call failed: #{e.message}"
         end
 
-        def get(path, params)
-          response = @connection.get(path, params)
+        def get(path, params, connection: @connection)
+          response = connection.get(path, params)
           [response.status, parse(response.body)]
         rescue Faraday::Error => e
           raise RequestFailed, "service list call failed: #{e.message}"
@@ -119,8 +126,8 @@ module RateCard
           message ? " (#{message})" : ''
         end
 
-        def build_connection
-          Faraday.new(url: BASE_URL) do |f|
+        def build_connection(url)
+          Faraday.new(url: url) do |f|
             f.headers['Authorization'] = "Bearer #{@token}"
             f.headers['Content-Type'] = 'application/json'
             f.options.timeout = 30

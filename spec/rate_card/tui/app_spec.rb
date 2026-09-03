@@ -805,7 +805,9 @@ RSpec.describe RateCard::TUI::App do
     end
   end
 
-  describe 'live-chart carriers (dynamic zone addresses)' do
+  # Disabled at the source (Carriers::LIVE_CHART is empty) until the
+  # zone_addresses endpoint exists in ehub-api.
+  xdescribe 'live-chart carriers (dynamic zone addresses)' do
     let(:cdl_catalog) do
       { 'services' => [
         { 'service_id' => 5001, 'service_code' => 'CDL_GROUND',
