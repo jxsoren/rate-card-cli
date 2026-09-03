@@ -46,6 +46,20 @@ module RateCard
       # here — no live OLX rating API exists in ehub.
       LIVE_CHART = %w[CDL GLS SpeedX UniUni Veho Dragonfly].freeze
 
+      # Carriers with an international destination in Constants::Addresses
+      # (USPS_CANADA_ORIGINS/USPS_CANADA_DESTINATION today). Kept explicit
+      # rather than inferring from chart presence, same reasoning as
+      # RURAL_AWARE — a carrier can support domestic long before any
+      # international country is verified for it.
+      #
+      # Empty for now: USPS_CANADA_ORIGINS' ZIP3 -> zone mapping is still
+      # UNVERIFIED (see Constants::Addresses), so the Destination prompt is
+      # hidden from the wizard until a second person re-derives it against
+      # files/usps_intl_canada_zones.json.gz. Add 'USPS' back once that's
+      # done — country_field, zones_field, and RunSpec#origin_for are
+      # already wired and need no other change.
+      INTERNATIONAL_AWARE = [].freeze
+
       module_function
 
       # OTHER is only for a malformed entry with no code at all, so a service is
@@ -67,6 +81,10 @@ module RateCard
 
       def live_chart?(carrier)
         LIVE_CHART.include?(carrier.to_s)
+      end
+
+      def international_aware?(carrier)
+        INTERNATIONAL_AWARE.include?(carrier.to_s)
       end
     end
   end

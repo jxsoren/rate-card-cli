@@ -69,7 +69,6 @@ RSpec.describe RateCard::TUI::App do
     press(model, Keys.enter)                     # carrier: usps
     press(model, Keys.enter)                     # rural: normal
     press(model, Keys.space, Keys.enter)         # services: first
-    press(model, Keys.enter)                     # destination: domestic
     press(model, Keys.enter)                     # zones: default 1-8
     press(model, Keys.enter)                     # unit: oz
     press(model, Keys.enter)                     # weights: default 1-16
@@ -218,7 +217,7 @@ RSpec.describe RateCard::TUI::App do
 
     it 'walks all the way back to the first question' do
       model = answer_happy_path(start)
-      10.times { press(model, Keys.esc) }
+      9.times { press(model, Keys.esc) }
 
       expect(model.view).to include('Rate by')
     end
@@ -259,7 +258,7 @@ RSpec.describe RateCard::TUI::App do
     # they are not carried forward as ticks into a list they are not in.
     it 'forgets the services when the carrier changes' do
       model = answer_happy_path(start)
-      7.times { press(model, Keys.esc) } # back to services
+      6.times { press(model, Keys.esc) } # back to services
       press(model, Keys.esc)             # back to rural
       press(model, Keys.esc)             # back to carrier
       press(model, Keys.down, Keys.enter) # carrier: fedex
@@ -292,7 +291,6 @@ RSpec.describe RateCard::TUI::App do
       press(model, Keys.enter) # carrier
       press(model, Keys.enter) # rural: normal
       press(model, Keys.space, Keys.enter) # services
-      press(model, Keys.enter) # destination: domestic
       press(model, Keys.type('99'), Keys.enter)
 
       expect(model.view).to include('no valid zones')
@@ -307,7 +305,6 @@ RSpec.describe RateCard::TUI::App do
       press(model, Keys.enter) # carrier
       press(model, Keys.enter) # rural: normal
       press(model, Keys.space, Keys.enter) # services
-      press(model, Keys.enter) # destination: domestic
       press(model, Keys.enter) # zones
       press(model, Keys.enter) # unit
       press(model, Keys.type('abc'), Keys.enter)
@@ -455,7 +452,6 @@ RSpec.describe RateCard::TUI::App do
       press(model, Keys.enter)             # rate by: weight (single USPS service present)
       press(model, Keys.enter)             # rural: normal (single carrier, so no carrier step)
       press(model, Keys.space, Keys.enter) # services
-      press(model, Keys.enter)             # destination: domestic
       press(model, Keys.enter)             # zones
       press(model, Keys.enter)             # unit
 
@@ -468,7 +464,6 @@ RSpec.describe RateCard::TUI::App do
       press(model, Keys.enter)
       press(model, Keys.enter)
       press(model, Keys.space, Keys.enter)
-      press(model, Keys.enter) # destination: domestic
       press(model, Keys.enter)
       press(model, Keys.enter)
       press(model, Keys.enter)
@@ -482,7 +477,6 @@ RSpec.describe RateCard::TUI::App do
       press(model, Keys.down, Keys.enter)  # rate by: cubic dimensions
       press(model, Keys.enter)             # rural: normal (USPS, only carrier left)
       press(model, Keys.space, Keys.enter) # services: first
-      press(model, Keys.enter)             # destination: domestic
       press(model, Keys.enter)             # zones
       press(model, Keys.enter)             # cubic tiers: all pre-ticked
       press(model, Keys.enter)             # package type
@@ -503,7 +497,6 @@ RSpec.describe RateCard::TUI::App do
       press(model, Keys.down, Keys.enter)  # rate by: cubic dimensions
       press(model, Keys.enter)             # rural: normal
       press(model, Keys.space, Keys.enter) # services
-      press(model, Keys.enter)             # destination: domestic
       press(model, Keys.enter)             # zones
 
       expect(model.view).to include('Tier 1')
@@ -523,7 +516,6 @@ RSpec.describe RateCard::TUI::App do
       press(model, Keys.down, Keys.enter)  # rate by: cubic dimensions
       press(model, Keys.enter)             # rural: normal
       press(model, Keys.space, Keys.enter) # services
-      press(model, Keys.enter)             # destination: domestic
       press(model, Keys.enter)             # zones
       press(model, Keys.enter)             # cubic tiers: all pre-ticked
 
@@ -771,7 +763,6 @@ RSpec.describe RateCard::TUI::App do
       press(model, Keys.down, Keys.enter)  # rate by: cubic dimensions
       press(model, Keys.enter)             # rural: normal (USPS only, cubic restricts to USPS)
       press(model, Keys.space, Keys.enter) # services
-      press(model, Keys.enter)             # destination: domestic
       press(model, Keys.enter)             # zones
       press(model, Keys.enter)             # cubic tiers: all pre-ticked
       press(model, Keys.enter)             # package type

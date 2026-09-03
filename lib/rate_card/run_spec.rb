@@ -18,6 +18,7 @@ module RateCard
     :weight_unit, :weights, :package_type, :rate_keys, :output_base,
     :show_table, :started_at, :rate_mode, :cubic_tiers, :rural,
     :zone_chart, # nil for the 5 static-chart carriers, populated for the live ones
+    :country, # nil for domestic; e.g. 'CA' for USPS->Canada — see #origin_for
     keyword_init: true
   )
     # Our rate-key name => the field it arrives as in service_rates. Getting
@@ -53,6 +54,13 @@ module RateCard
     # nil/false (rural mode off, or a non-rural-aware carrier) is falsy here.
     def rural?
       !!rural
+    end
+
+    # true only for USPS->Canada today. nil (domestic, or any other carrier)
+    # is falsy here — every existing caller keeps seeing plain domestic
+    # behavior.
+    def international?
+      !!country
     end
 
     # [1,2,3,5] => "1-3,5". Runs of three or more collapse; a pair stays listed,
@@ -125,12 +133,32 @@ module RateCard
     # disambiguates from a real zone number without needing to check carrier
     # or rural separately. USPS rural mode keeps integer zones, just against
     # the rural chart instead of the normal one.
+    # USPS->Canada is destination-fixed, origin-varies — the opposite of
+    # every other chart here (see #origin_for) — so this returns the one
+    # Canadian destination for every zone rather than looking one up per
+    # zone.
     def address_for(zone)
       return Constants::Addresses::UPS_RURAL[zone] if zone.is_a?(Symbol)
       return Constants::Addresses::USPS_RURAL_DAS[zone] if carrier == 'USPS' && rural?
+      return Constants::Addresses::USPS_CANADA_DESTINATION if usps_canada?
       return zone_chart[zone] if zone_chart
 
       Constants::Addresses.for_carrier(carrier)[zone]
+    end
+
+    # nil for every carrier/zone except USPS->Canada, where the zone is a
+    # property of the origin ZIP3 (Usps::IntlGroup1ZoneCalculator), not the
+    # destination — see Constants::Addresses::USPS_CANADA_ORIGINS. Shipment
+    # falls back to the usual fixed Constants::Addresses::ORIGIN when this
+    # is nil, so every other carrier is unaffected.
+    def origin_for(zone)
+      return nil unless usps_canada?
+
+      Constants::Addresses::USPS_CANADA_ORIGINS[zone]
+    end
+
+    def usps_canada?
+      carrier == 'USPS' && country == 'CA'
     end
 
     def rate_key_label(key)
@@ -170,6 +198,7 @@ module RateCard
     # run_dir. USPS rural mode sweeps real zones as usual, so it just gets
     # the generic suffix.
     def rural_suffix
+      return "_#{country}" if international?
       return '' unless rural?
 
       surcharge = zones.find { |zone| zone.is_a?(Symbol) }
@@ -190,9 +219,9 @@ module RateCard
       end
 
       zones.each do |zone|
-        next if address_for(zone)
+        next if address_for(zone) && (!usps_canada? || origin_for(zone))
 
-        raise ArgumentError, "no address for zone #{zone} on carrier #{carrier}"
+        raise ArgumentError, "no address for zone #{zone} on carrier #{carrier}#{" (#{country})" if country}"
       end
 
       self

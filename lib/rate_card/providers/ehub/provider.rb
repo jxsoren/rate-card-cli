@@ -35,8 +35,8 @@ module RateCard
           ServiceCatalog.from_response(body)
         end
 
-        def build_payload(spec:, weight:, address:)
-          Shipment.new(spec: spec, weight: weight, address: address).payload
+        def build_payload(spec:, weight:, address:, origin: nil)
+          Shipment.new(spec: spec, weight: weight, address: address, origin: origin).payload
         end
 
         # Normalizes one /rates response into what Grid needs to record a cell:

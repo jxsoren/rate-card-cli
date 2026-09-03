@@ -14,16 +14,21 @@ module RateCard
         ITEM_VALUE = 18.99
         HS_TARIFF_CODE = '1704.90.3000'
 
-        def initialize(spec:, weight:, address:)
+        # origin: nil for every carrier except USPS->Canada, where the zone is
+        # a property of the origin rather than the destination — see
+        # RunSpec#origin_for. Falls back to the usual fixed shipment origin
+        # when nil, so every other carrier is unaffected.
+        def initialize(spec:, weight:, address:, origin: nil)
           @spec = spec
           @weight = weight
           @address = address
+          @origin = origin
         end
 
         def payload
           {
             shipment: {
-              from_location: Constants::Addresses::ORIGIN,
+              from_location: origin || Constants::Addresses::ORIGIN,
               to_location: to_location,
               parcels: [parcel]
             }
@@ -32,7 +37,7 @@ module RateCard
 
         private
 
-        attr_reader :spec, :weight, :address
+        attr_reader :spec, :weight, :address, :origin
 
         def to_location
           {

@@ -71,7 +71,8 @@ module RateCard
     end
 
     def fetch_cell(client, weight, zone, retry_sleeper)
-      payload = provider.build_payload(spec: spec, weight: weight, address: spec.address_for(zone))
+      payload = provider.build_payload(spec: spec, weight: weight, address: spec.address_for(zone),
+                                        origin: spec.origin_for(zone))
       result = fetch_with_transient_retry(client, payload, retry_sleeper)
       record_response(result, weight, zone)
       @mutex.synchronize { @succeeded += 1 }
