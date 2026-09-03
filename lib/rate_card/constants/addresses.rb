@@ -106,6 +106,36 @@ module RateCard
       # mode sweeps surcharge types instead of zones — see RunSpec#address_for.
       UPS_RURAL = { edas: UPS_EDAS_EXCEPTION, rdas: UPS_RDAS_EXCEPTION }.freeze
 
+      # UNVERIFIED — ported as-is from ../rate_table_builder/constants/address_constants.rb
+      # (INTL_ADDRESSES, originally commented "# International?"). Not
+      # confirmed against any carrier's actual international zone chart, and
+      # not carrier-specific: the source file left international: nil for
+      # USPS, UPS, and FedEx alike, so these zone numbers are not known to
+      # correspond to DHL Express, DHL eCommerce, or USPS Priority Mail
+      # International zone boundaries. Do not wire this into BY_CARRIER or
+      # for_carrier until each entry is hand-verified against a real
+      # carrier zone chart, the way the domestic addresses above are.
+      INTERNATIONAL_UNVERIFIED = [
+        { zone: 0, address1: '6990 Victoria Dr', city: 'Vancouver', state: 'Vancouver', postal_code: 'V5P 3Y8', country: 'CA' },
+        { zone: 1, address1: '1249 Metcalfe St', city: 'Montreal', state: 'Montreal', postal_code: 'H3B 2V5', country: 'CA' },
+        { zone: 2, address1: '10416 80 Ave NW', city: 'Edmonton', state: 'Edmonton', postal_code: 'T6E 5T7', country: 'CA' },
+        { zone: 3, address1: '4910 52 St', city: 'Yellowknife', state: 'Yellowknife', postal_code: 'X1A 1T3', country: 'CA' },
+        { zone: 4, address1: '179 Shaftesbury Ave', city: 'London', state: 'London', postal_code: 'WC2H 8JR', country: 'GB' },
+        { zone: 5, address1: 'R Sao Joaquim, 381 - Liberdade', city: 'Sao Paulo', state: 'Sao Paulo', postal_code: '01508-001', country: 'BR' },
+        { zone: 6, address1: '10 Bligh St', city: 'Sydney', state: 'Sydney', postal_code: '2000', country: 'AU' },
+        { zone: 7, address1: 'Rudi-Dutschke-Strasse 26', city: 'Berlin', state: 'Berlin', postal_code: '10969', country: 'DE' },
+        { zone: 8, address1: '107 Rue de Rivoli', city: 'Paris', state: 'Paris', postal_code: '75001', country: 'FR' },
+        { zone: 9, address1: 'Colima 150, Roma Nte.', city: 'Mexico City', state: 'Mexico City', postal_code: '06700', country: 'MX' },
+        { zone: 10, address1: '18 Merrion Row', city: 'Dublin', state: 'Dublin', postal_code: 'D02 A316', country: 'IE' },
+        { zone: 11, address1: '3 Chome-4 Kagurazaka', city: 'Tokyo', state: 'Tokyo', postal_code: '162-0825', country: 'JP' },
+        { zone: 12, address1: '90 Wellesley Street West', city: 'Auckland', state: 'Auckland', postal_code: '1010', country: 'NZ' },
+        { zone: 13, address1: 'Munsterhof 12,', city: 'Zurich', state: 'Zurich', postal_code: '8001', country: 'CH' },
+        { zone: 14, address1: 'Daniel Stalpertstraat 103', city: 'Amsterdam', state: 'Amsterdam', postal_code: '1072', country: 'NL' },
+        { zone: 15, address1: '404 Crescent Business Park Link Road Andheri', city: 'Mumbai', state: 'Maharashtra', postal_code: '400072', country: 'IN' },
+        { zone: 16, address1: 'C. del Prado, 16', city: 'Madrid', state: 'Madrid', postal_code: '28014', country: 'ES' },
+        { zone: 17, address1: 'Piazza Pasquale Paoli 15', city: 'Roma', state: 'Roma', postal_code: '00186', country: 'IT' }
+      ].freeze
+
       module_function
 
       # Raises rather than falling back. The old USPS default meant asking for
