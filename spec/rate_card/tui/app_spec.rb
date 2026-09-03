@@ -566,7 +566,7 @@ RSpec.describe RateCard::TUI::App do
       press(model, Keys.enter)            # rate by: weight
       press(model, Keys.down, Keys.enter) # carrier: fedex
 
-      expect(model.view).not_to include('Rural / DAS')
+      expect(model.view).not_to include('Address Type')
       expect(model.view).to include('Services')
     end
 

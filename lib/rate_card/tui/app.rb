@@ -153,7 +153,7 @@ module RateCard
           break unless @field.nil?
         end
         nil
-      rescue RateCard::Providers::EHub::Client::RequestFailed, UnsupportedCarrier => e
+      rescue RequestFailed, UnsupportedCarrier => e
         fail_with(e).last
       end
 
@@ -209,7 +209,7 @@ module RateCard
           break unless @field.nil?
         end
         nil
-      rescue RateCard::Providers::EHub::Client::RequestFailed, UnsupportedCarrier => e
+      rescue RequestFailed, UnsupportedCarrier => e
         fail_with(e).last
       end
 
@@ -343,7 +343,7 @@ module RateCard
         return nil unless Constants::Carriers.rural_aware?(carrier)
 
         choices = [['Normal', false], ['Rural (DAS)', true]]
-        Fields::Select.new(label: 'Rural / DAS', choices: choices,
+        Fields::Select.new(label: 'Address Type', choices: choices,
                            selected: choices.index { |_, v| v == @answers[:rural] } || 0)
       end
 
