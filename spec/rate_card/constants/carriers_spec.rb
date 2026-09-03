@@ -32,6 +32,15 @@ RSpec.describe RateCard::Constants::Carriers do
       expect(described_class.for_carrier_code('ontrac')).to eq('ONTRAC')
     end
 
+    it 'maps the 6 live-chart carrier codes to their display names' do
+      expect(described_class.for_carrier_code('cdl')).to eq('CDL')
+      expect(described_class.for_carrier_code('gls')).to eq('GLS')
+      expect(described_class.for_carrier_code('speedx')).to eq('SpeedX')
+      expect(described_class.for_carrier_code('uniuni')).to eq('UniUni')
+      expect(described_class.for_carrier_code('veho')).to eq('Veho')
+      expect(described_class.for_carrier_code('dragonfly')).to eq('Dragonfly')
+    end
+
     it 'falls back to Other only when the code is missing or blank' do
       expect(described_class.for_carrier_code(nil)).to eq('Other')
       expect(described_class.for_carrier_code('   ')).to eq('Other')
@@ -57,6 +66,19 @@ RSpec.describe RateCard::Constants::Carriers do
       expect(described_class.rural_aware?('UPS')).to be(true)
       expect(described_class.rural_aware?('FedEx')).to be(false)
       expect(described_class.rural_aware?('Nonesuch')).to be(false)
+    end
+  end
+
+  describe '.live_chart?' do
+    it 'is true for the 6 live-chart carriers' do
+      %w[CDL GLS SpeedX UniUni Veho Dragonfly].each do |carrier|
+        expect(described_class.live_chart?(carrier)).to be(true)
+      end
+    end
+
+    it 'is false for a static-chart carrier and for OLX' do
+      expect(described_class.live_chart?('USPS')).to be(false)
+      expect(described_class.live_chart?('OLX')).to be(false)
     end
   end
 end

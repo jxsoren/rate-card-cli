@@ -20,6 +20,7 @@ module RateCard
         # rely on a redirect — which can drop the POST body.
         RATES_PATH = '/api/v2/rates'
         SERVICES_PATH = '/api/v2/services'
+        ZONE_ADDRESSES_PATH = '/api/v2/services/%<service_id>s/zone_addresses'
         # 'ecommerce' services are storefront integrations, not shippable rates.
         SERVICES_CATEGORY = 'shipping'
 
@@ -55,6 +56,15 @@ module RateCard
         # services that would not have quoted at the single probe weight and zone.
         def fetch_services
           request('service list call') { get(SERVICES_PATH, category: SERVICES_CATEGORY) }
+        end
+
+        # Returns the parsed { "zones" => { "1" => {address1:, city:, ...}, ... } }
+        # body for one service's live zone chart. from_postal_code is only
+        # meaningful for a fixed-origin carrier (e.g. GLS) — omitted params
+        # means the server resolves the origin from account configuration.
+        def fetch_zone_addresses(service_id, from_postal_code: nil)
+          params = from_postal_code ? { from_postal_code: from_postal_code } : {}
+          request('zone addresses call') { get(format(ZONE_ADDRESSES_PATH, service_id: service_id), params) }
         end
 
         private

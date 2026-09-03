@@ -161,6 +161,17 @@ RSpec.describe RateCard::RunSpec do
       expect(build(carrier: 'UPS', zones: [:rdas], rural: true).address_for(:rdas))
         .to include(city: 'Tyner')
     end
+
+    it 'resolves through zone_chart when present, without touching Addresses::BY_CARRIER' do
+      chart = { 1 => { city: 'Live City' } }
+      spec = build(carrier: 'GLS', zones: [1], zone_chart: chart)
+
+      expect(spec.address_for(1)).to include(city: 'Live City')
+    end
+
+    it 'falls through to Addresses.for_carrier when zone_chart is nil' do
+      expect(build(zone_chart: nil).address_for(3)).to include(city: 'Cody')
+    end
   end
 
   describe '#rural?' do
@@ -293,6 +304,12 @@ RSpec.describe RateCard::RunSpec do
     it 'rejects a zone with no curated address for the carrier' do
       expect { build(zones: [1, 42]).validate! }
         .to raise_error(ArgumentError, /no address for zone 42/)
+    end
+
+    it 'rejects a zone missing from a live zone_chart, same as a missing static-chart zone' do
+      spec = build(carrier: 'GLS', zones: [1, 42], zone_chart: { 1 => { city: 'Live City' } })
+
+      expect { spec.validate! }.to raise_error(ArgumentError, /no address for zone 42/)
     end
   end
 end

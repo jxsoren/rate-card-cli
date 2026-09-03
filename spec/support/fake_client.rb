@@ -7,8 +7,9 @@
 class FakeClient
   attr_reader :payloads
 
-  def initialize(services: { 'services' => [] }, &responder)
+  def initialize(services: { 'services' => [] }, zone_addresses: {}, &responder)
     @services = services
+    @zone_addresses = zone_addresses
     @responder = responder
     @payloads = []
     @mutex = Mutex.new
@@ -19,6 +20,19 @@ class FakeClient
 
     @services
   end
+
+  # zone_addresses: keyed by service_id, each value either the parsed
+  # { "zones" => {...} } body to return or an Exception to raise — same shape
+  # convention as `services:` above.
+  def fetch_zone_addresses(service_id, from_postal_code: nil)
+    @last_from_postal_code = from_postal_code
+    result = @zone_addresses.fetch(service_id) { { 'zones' => {} } }
+    raise result if result.is_a?(Exception)
+
+    result
+  end
+
+  attr_reader :last_from_postal_code
 
   def fetch_rates(payload)
     @mutex.synchronize { @payloads << payload }

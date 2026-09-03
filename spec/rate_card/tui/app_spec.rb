@@ -539,21 +539,21 @@ RSpec.describe RateCard::TUI::App do
       ] }
     end
 
-    it 'is offered for USPS and switches the zone chart to the rural one' do
+    it 'is offered for USPS and keeps the normal zone chart, resolving addresses from the rural one' do
       model = start
       press(model, Keys.enter)             # rate by: weight
       press(model, Keys.enter)             # carrier: usps
       press(model, Keys.down, Keys.enter)  # rural: Rural (DAS)
       press(model, Keys.space, Keys.enter) # services
-      press(model, Keys.enter)             # zones: default now 0-8
+      press(model, Keys.enter)             # zones: default 1-8
       press(model, Keys.enter)             # unit
       press(model, Keys.enter)             # weights
       press(model, Keys.enter)             # package type
       press(model, Keys.enter)             # rate keys
 
       spec = spec_from(model)
-      expect(spec.zones).to eq((0..8).to_a)
-      expect(spec.address_for(0)).to include(city: 'Bluebell')
+      expect(spec.zones).to eq((1..8).to_a)
+      expect(spec.address_for(1)).to include(city: 'Bear River City')
       expect(spec.run_dir.to_s).to end_with('_rural')
     end
 
@@ -781,6 +781,106 @@ RSpec.describe RateCard::TUI::App do
 
       expect(model.results.length).to eq(2)
       expect(model.results).to all(satisfy { |r| r[:grid].any_rates? })
+    end
+  end
+
+  describe 'live-chart carriers (dynamic zone addresses)' do
+    let(:cdl_catalog) do
+      { 'services' => [
+        { 'service_id' => 5001, 'service_code' => 'CDL_GROUND',
+          'service' => 'CDL Ground', 'carrier_code' => 'cdl' }
+      ] }
+    end
+
+    let(:gls_catalog) do
+      { 'services' => [
+        { 'service_id' => 6001, 'service_code' => 'GLS_GROUND',
+          'service' => 'GLS Ground', 'carrier_code' => 'gls' }
+      ] }
+    end
+
+    let(:live_chart_body) do
+      { 'zones' => {
+        '3' => { 'address1' => '1 Live Way', 'city' => 'Live City', 'state' => 'UT',
+                  'postal_code' => '84000', 'country' => 'US' },
+        '7' => { 'address1' => '2 Live Way', 'city' => 'Other Live City', 'state' => 'UT',
+                  'postal_code' => '84001', 'country' => 'US' }
+      } }
+    end
+
+    it 'offers a carrier with no static chart but a live one' do
+      client = FakeClient.new(services: cdl_catalog, zone_addresses: { 5001 => live_chart_body })
+      model = start(client: client)
+
+      expect(model.error).to be_nil
+      expect(model.view).to include('CDL')
+    end
+
+    it 'reflects the fetched chart keys as the available zones instead of a fixed 1-8' do
+      client = FakeClient.new(services: cdl_catalog, zone_addresses: { 5001 => live_chart_body })
+      model = start(client: client)
+      press(model, Keys.space, Keys.enter) # services: CDL Ground
+
+      expect(model.view).to include('available: 3-7')
+    end
+
+    it 'resolves address_for through the live chart for the selected zones' do
+      client = FakeClient.new(services: cdl_catalog, zone_addresses: { 5001 => live_chart_body })
+      model = start(client: client)
+      press(model, Keys.space, Keys.enter) # services
+      press(model, Keys.enter)             # zones: default 3-7
+      press(model, Keys.enter)             # unit
+      press(model, Keys.enter)             # weights
+      press(model, Keys.enter)             # package type
+      press(model, Keys.enter)             # rate keys
+
+      spec = spec_from(model)
+      expect(spec.zones).to eq([3, 7])
+      expect(spec.address_for(3)).to include(city: 'Live City')
+      expect(spec.address_for(7)).to include(city: 'Other Live City')
+    end
+
+    it 'fetches the chart once per carrier per run even though zones_field and address_for both need it' do
+      client = FakeClient.new(services: cdl_catalog, zone_addresses: { 5001 => live_chart_body })
+      expect(client).to receive(:fetch_zone_addresses).once.and_call_original
+      model = start(client: client)
+      press(model, Keys.space, Keys.enter) # services
+      press(model, Keys.enter)             # zones
+      press(model, Keys.enter)             # unit
+      press(model, Keys.enter)             # weights
+      press(model, Keys.enter)             # package type
+      press(model, Keys.enter)             # rate keys
+
+      spec_from(model).zones.each { |zone| spec_from(model).address_for(zone) }
+    end
+
+    it 'prompts for a GLS origin postal code before zones, defaulting to the fixed shipment origin' do
+      client = FakeClient.new(services: gls_catalog, zone_addresses: { 6001 => live_chart_body })
+      model = start(client: client)
+      press(model, Keys.space, Keys.enter) # services: GLS Ground
+
+      expect(model.view).to include('GLS origin postal code')
+      press(model, Keys.enter) # accept the default origin
+      expect(client.last_from_postal_code).to eq('84070')
+    end
+
+    it 'passes the answered GLS origin through as from_postal_code' do
+      client = FakeClient.new(services: gls_catalog, zone_addresses: { 6001 => live_chart_body })
+      model = start(client: client)
+      press(model, Keys.space, Keys.enter)       # services
+      press(model, Keys.type('83001'), Keys.enter) # gls_origin: custom postal code
+      press(model, Keys.enter)                   # zones — triggers the live fetch
+
+      expect(client.last_from_postal_code).to eq('83001')
+    end
+
+    it 'omits from_postal_code for a non-GLS live-chart carrier' do
+      client = FakeClient.new(services: cdl_catalog, zone_addresses: { 5001 => live_chart_body })
+      model = start(client: client)
+      press(model, Keys.space, Keys.enter) # services
+      press(model, Keys.enter)             # zones — triggers the live fetch
+
+      expect(client.last_from_postal_code).to be_nil
     end
   end
 end

@@ -106,6 +106,45 @@ module RateCard
       # mode sweeps surcharge types instead of zones — see RunSpec#address_for.
       UPS_RURAL = { edas: UPS_EDAS_EXCEPTION, rdas: UPS_RDAS_EXCEPTION }.freeze
 
+      # UNVERIFIED — real public post-office addresses, one per origin ZIP3
+      # that Usps::IntlGroup1ZoneCalculator (ehub app/services/usps/
+      # intl_group1_zone_calculator.rb, backed by
+      # files/usps_intl_canada_zones.json.gz) maps to each zone 1-8.
+      #
+      # USPS's Canada rate is origin-driven, not destination-driven like the
+      # domestic charts above: the zone comes from the FROM zip's first 3
+      # digits, and the destination only needs to be a real address in
+      # Canada (see the spec fixtures in usps/rate_calculator_spec.rb, which
+      # call rate(from_zip, 'CA', ...) - no street-level destination enters
+      # the calculation at all). That inverts RunSpec#address_for's usual
+      # "vary destination, fix origin" shape for this one carrier/country
+      # pair - see #origin_for.
+      #
+      # Addresses are real (each is a public USPS post office and its ZIP3
+      # was confirmed against the actual origin table, not just "a nearby
+      # city"), but UNVERIFIED means the ZIP3 -> zone mapping itself hasn't
+      # been re-derived from files/usps_intl_canada_zones.json.gz by a
+      # second person - do this before trusting a rate card built from it.
+      USPS_CANADA_ORIGINS = {
+        1 => { address1: '1040 Waverly Ave', city: 'Holtsville', state: 'NY', postal_code: '00501', country: 'US' },
+        2 => { address1: '600 Suffield St', city: 'Agawam', state: 'MA', postal_code: '01001', country: 'US' },
+        3 => { address1: '462 Washington St', city: 'Woburn', state: 'MA', postal_code: '01801', country: 'US' },
+        4 => { address1: '73 Hammond St Ste 9998', city: 'Bangor', state: 'ME', postal_code: '04401', country: 'US' },
+        5 => { address1: '83 Broad St', city: 'Charleston', state: 'SC', postal_code: '29401', country: 'US' },
+        6 => { address1: '50 Carr 459', city: 'Aguadilla', state: 'PR', postal_code: '00603', country: 'US' },
+        7 => { address1: '709 W 9th St', city: 'Juneau', state: 'AK', postal_code: '99801', country: 'US' },
+        8 => { address1: '99-040 Kauhale St', city: 'Aiea', state: 'HI', postal_code: '96701', country: 'US' }
+      }.freeze
+
+      # UNVERIFIED — the fixed Canadian destination for every USPS_CANADA_ORIGINS
+      # zone. Ported from INTERNATIONAL_UNVERIFIED zone 0 below. Safe to reuse
+      # across all 8 zones only because USPS's Canada rate doesn't depend on
+      # destination specifics - see USPS_CANADA_ORIGINS above. Do not reuse
+      # this reasoning for any other carrier without checking that carrier's
+      # own calculator the same way.
+      USPS_CANADA_DESTINATION = { address1: '6990 Victoria Dr', city: 'Vancouver', state: 'BC',
+                                   postal_code: 'V5P 3Y8', country: 'CA' }.freeze
+
       # UNVERIFIED — ported as-is from ../rate_table_builder/constants/address_constants.rb
       # (INTL_ADDRESSES, originally commented "# International?"). Not
       # confirmed against any carrier's actual international zone chart, and

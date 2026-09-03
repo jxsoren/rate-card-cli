@@ -102,6 +102,73 @@ RSpec.describe RateCard::Providers::EHub::Client do
     end
   end
 
+  describe '#fetch_zone_addresses' do
+    it 'GETs the per-service zone_addresses path and returns the parsed body' do
+      captured = nil
+      stubs = Faraday::Adapter::Test::Stubs.new do |stub|
+        stub.get('/api/v2/services/9001/zone_addresses') do |env|
+          captured = env
+          [200, { 'Content-Type' => 'application/json' },
+           JSON.generate('zones' => { '1' => { 'city' => 'Sandy' } })]
+        end
+      end
+      client = described_class.new(token: 'secret-jwt', stubs: stubs)
+
+      expect(client.fetch_zone_addresses(9001)).to eq('zones' => { '1' => { 'city' => 'Sandy' } })
+      expect(captured.params).to eq({})
+      expect(captured.request_headers['Authorization']).to eq('Bearer secret-jwt')
+    end
+
+    it 'passes from_postal_code through as a query param when given' do
+      captured = nil
+      stubs = Faraday::Adapter::Test::Stubs.new do |stub|
+        stub.get('/api/v2/services/9001/zone_addresses') do |env|
+          captured = env
+          [200, { 'Content-Type' => 'application/json' }, JSON.generate('zones' => {})]
+        end
+      end
+      client = described_class.new(token: 'tok', stubs: stubs)
+
+      client.fetch_zone_addresses(9001, from_postal_code: '84070')
+
+      expect(captured.params).to eq('from_postal_code' => '84070')
+    end
+
+    it 'omits from_postal_code from the query params when not given' do
+      captured = nil
+      stubs = Faraday::Adapter::Test::Stubs.new do |stub|
+        stub.get('/api/v2/services/9001/zone_addresses') do |env|
+          captured = env
+          [200, { 'Content-Type' => 'application/json' }, JSON.generate('zones' => {})]
+        end
+      end
+      client = described_class.new(token: 'tok', stubs: stubs)
+
+      client.fetch_zone_addresses(9001)
+
+      expect(captured.params).to eq({})
+    end
+
+    it 'raises Unauthorized on 403' do
+      stubs = Faraday::Adapter::Test::Stubs.new do |stub|
+        stub.get('/api/v2/services/9001/zone_addresses') { [403, {}, '{}'] }
+      end
+      client = described_class.new(token: 'tok', stubs: stubs, sleeper: ->(_) {})
+
+      expect { client.fetch_zone_addresses(9001) }.to raise_error(RateCard::Unauthorized)
+    end
+
+    it 'raises RequestFailed on a non-retryable failure' do
+      stubs = Faraday::Adapter::Test::Stubs.new do |stub|
+        stub.get('/api/v2/services/9001/zone_addresses') { [422, {}, '{}'] }
+      end
+      client = described_class.new(token: 'tok', stubs: stubs, sleeper: ->(_) {})
+
+      expect { client.fetch_zone_addresses(9001) }
+        .to raise_error(RateCard::RequestFailed, /zone addresses call failed with HTTP 422/)
+    end
+  end
+
   it 'raises RequestFailed when the connection itself fails' do
     stubs = Faraday::Adapter::Test::Stubs.new do |stub|
       stub.post('/api/v2/rates') { raise Faraday::ConnectionFailed, 'boom' }

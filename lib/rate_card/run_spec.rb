@@ -17,6 +17,7 @@ module RateCard
     :token, :customer_name, :customer_id, :carrier, :services, :zones,
     :weight_unit, :weights, :package_type, :rate_keys, :output_base,
     :show_table, :started_at, :rate_mode, :cubic_tiers, :rural,
+    :zone_chart, # nil for the 5 static-chart carriers, populated for the live ones
     keyword_init: true
   )
     # Our rate-key name => the field it arrives as in service_rates. Getting
@@ -127,6 +128,7 @@ module RateCard
     def address_for(zone)
       return Constants::Addresses::UPS_RURAL[zone] if zone.is_a?(Symbol)
       return Constants::Addresses::USPS_RURAL_DAS[zone] if carrier == 'USPS' && rural?
+      return zone_chart[zone] if zone_chart
 
       Constants::Addresses.for_carrier(carrier)[zone]
     end

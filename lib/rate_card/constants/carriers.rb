@@ -7,7 +7,8 @@ module RateCard
     module Carriers
       OTHER = 'Other'
 
-      DISPLAY_ORDER = ['USPS', 'UPS', 'FedEx', 'DHL', 'OSM', 'Amazon', OTHER].freeze
+      DISPLAY_ORDER = ['USPS', 'UPS', 'FedEx', 'DHL', 'OSM', 'CDL', 'GLS', 'SpeedX',
+                       'UniUni', 'Veho', 'Dragonfly', 'Amazon', OTHER].freeze
 
       # Every /services entry carries a lowercase carrier_code. Anything not
       # listed here keeps its own code, upcased: an unrecognised carrier is
@@ -27,13 +28,23 @@ module RateCard
       # silently inherit the wrong zone chart.
       CARRIER_CODES = {
         'usps' => 'USPS', 'ups' => 'UPS', 'fedex' => 'FedEx',
-        'dhl' => 'DHL Express', 'dhl_ecommerce' => 'DHL', 'osm' => 'OSM', 'amazon' => 'Amazon'
+        'dhl' => 'DHL Express', 'dhl_ecommerce' => 'DHL', 'osm' => 'OSM',
+        'cdl' => 'CDL', 'gls' => 'GLS', 'speedx' => 'SpeedX',
+        'uniuni' => 'UniUni', 'veho' => 'Veho', 'dragonfly' => 'Dragonfly',
+        'amazon' => 'Amazon'
       }.freeze
 
       # Carriers with a rural/DAS surcharge test address in Constants::Addresses.
       # Independent of zone-chart support - a carrier can have a verified zone
       # chart and no rural chart at all.
       RURAL_AWARE = %w[USPS UPS].freeze
+
+      # Carriers with no entry in Addresses::BY_CARRIER — their zone chart is
+      # fetched live per run via Providers::EHub::Client#fetch_zone_addresses
+      # instead of read from a hand-verified constant. See
+      # 2026-09-03-dynamic-zone-addresses-design.md. OLX is deliberately not
+      # here — no live OLX rating API exists in ehub.
+      LIVE_CHART = %w[CDL GLS SpeedX UniUni Veho Dragonfly].freeze
 
       module_function
 
@@ -52,6 +63,10 @@ module RateCard
 
       def rural_aware?(carrier)
         RURAL_AWARE.include?(carrier.to_s)
+      end
+
+      def live_chart?(carrier)
+        LIVE_CHART.include?(carrier.to_s)
       end
     end
   end

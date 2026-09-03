@@ -24,7 +24,7 @@ module RateCard
 
       # No :token stage — see TokenPrompt for why it cannot live in the loop.
       STAGES = %i[
-        loading rate_mode carrier rural rural_surcharges services zones unit weights
+        loading rate_mode carrier rural rural_surcharges services gls_origin zones unit weights
         package_type rate_keys confirm add_another fetching
       ].freeze
 
@@ -59,6 +59,7 @@ module RateCard
         @log = []
         @results = []
         @queued_specs = []
+        @scenario = 1
       end
 
       def cancelled? = @cancelled
@@ -194,6 +195,9 @@ module RateCard
           return start_fetch
         end
 
+        @scenario += 1
+        @log << { stage: :scenario_header, line: scenario_header_line(@scenario) }
+
         @stage = STAGES.first
         loop do
           @stage = STAGES[STAGES.index(@stage) + 1]
@@ -201,6 +205,10 @@ module RateCard
           break unless @field.nil?
         end
         nil
+      end
+
+      def scenario_header_line(number)
+        "\n#{Theme.title("Scenario #{number}")}"
       end
 
       # Commits the just-confirmed scenario's specs (today's build_specs,
@@ -230,6 +238,7 @@ module RateCard
         when :rural            then rural_field
         when :rural_surcharges then rural_surcharges_field
         when :services         then services_field
+        when :gls_origin       then gls_origin_field
         when :zones        then zones_field
         when :unit         then unit_field
         when :weights      then weights_field
@@ -288,7 +297,9 @@ module RateCard
       def selectable_carriers
         carriers = Service.group_by_carrier(@services)
                                  .keys
-                                 .select { |carrier| Constants::Addresses.supported?(carrier) }
+                                 .select do |carrier|
+                                   Constants::Addresses.supported?(carrier) || Constants::Carriers.live_chart?(carrier)
+                                 end
         return carriers & ['USPS'] if @answers[:rate_mode] == :cubic
 
         carriers
@@ -336,7 +347,7 @@ module RateCard
       def zones_field
         return nil if ups_rural?
 
-        available = usps_rural? ? Constants::Addresses::USPS_RURAL_DAS.keys.sort : Constants::Addresses.available_zones(carrier)
+        available = live_zones_for(carrier)
         full = "#{available.first}-#{available.last}"
         answered = @answers[:zones]
 
@@ -358,6 +369,63 @@ module RateCard
 
       def ups_rural?
         carrier == 'UPS' && @answers[:rural] == true
+      end
+
+      # Only asked for GLS: a fixed-origin carrier whose live zone chart is
+      # computed from the shipment's origin postal code rather than an
+      # account-configured hub, same reasoning as USPS/UPS/FedEx's shipment
+      # origin — but that origin only feeds fetch_zone_addresses' lookup, it
+      # is not itself a shipment field.
+      def gls_origin_field
+        return nil unless carrier == 'GLS'
+
+        Fields::Text.new(
+          label: 'GLS origin postal code',
+          default: @answers[:gls_origin] || Constants::Addresses::ORIGIN[:postal_code],
+          hint: 'GLS zone is computed from this origin, not your account',
+          parse: lambda { |raw|
+            raise ArgumentError, 'enter a postal code' if raw.strip.empty?
+
+            raw.strip
+          }
+        )
+      end
+
+      def live_zones_for(carrier)
+        return Constants::Addresses.available_zones(carrier) unless Constants::Carriers.live_chart?(carrier)
+
+        live_chart(carrier).keys.sort
+      end
+
+      # Memoized per (carrier, run) — the endpoint gets hit once even though
+      # zones_field, and later address_for per selected zone, both need the chart.
+      def live_chart(carrier)
+        @live_charts ||= {}
+        @live_charts[carrier] ||= fetch_live_chart(carrier)
+      end
+
+      def fetch_live_chart(carrier)
+        service = @services.find { |s| s.carrier == carrier }
+        raise UnsupportedCarrier, "no service_id found for #{carrier}" unless service
+
+        client = @client_factory.call(@token)
+        body = client.fetch_zone_addresses(service.id, from_postal_code: gls_origin_for(carrier))
+        chart = (body['zones'] || {}).transform_keys(&:to_i)
+                                      .transform_values { |address| symbolize(address) }
+        if chart.empty?
+          raise UnsupportedCarrier,
+                "eHub found no real address for any zone for #{carrier} on this account yet"
+        end
+
+        chart
+      end
+
+      def gls_origin_for(carrier)
+        carrier == 'GLS' ? (@answers[:gls_origin] || Constants::Addresses::ORIGIN[:postal_code]) : nil
+      end
+
+      def symbolize(hash)
+        hash.to_h { |k, v| [k.to_sym, v] }
       end
 
       # Weight is fixed per cubic tier, so asking for a display unit is
@@ -459,7 +527,9 @@ module RateCard
       end
 
       def with_supported_carrier(services)
-        services.select { |service| Constants::Addresses.supported?(service.carrier) }
+        services.select do |service|
+          Constants::Addresses.supported?(service.carrier) || Constants::Carriers.live_chart?(service.carrier)
+        end
       end
 
       def unsupported_message(services)
@@ -583,6 +653,7 @@ module RateCard
           rural: @answers[:rural],
           package_type: @answers[:package_type],
           rate_keys: @answers[:rate_keys],
+          zone_chart: Constants::Carriers.live_chart?(carrier) ? live_chart(carrier) : nil,
           output_base: @output_base,
           show_table: true,
           started_at: Time.now
@@ -661,7 +732,8 @@ module RateCard
       # what is already visible rather than the first chance to check it.
       def answered_line(stage, value)
         label = { rate_mode: 'rate by', carrier: 'carrier', rural: 'rural / DAS',
-                  rural_surcharges: 'surcharge types', services: 'services', zones: 'zones',
+                  rural_surcharges: 'surcharge types', services: 'services',
+                  gls_origin: 'GLS origin', zones: 'zones',
                   unit: 'unit', weights: 'weights', package_type: 'package',
                   rate_keys: 'columns' }[stage]
         label = 'cubic tiers' if stage == :weights && @answers[:rate_mode] == :cubic
