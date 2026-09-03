@@ -61,6 +61,7 @@ module RateCard
         @queued_specs = []
         @queued_scenarios = []
         @scenario = 1
+        @log << { stage: :scenario_header, line: scenario_header_line(@scenario) }
       end
 
       def cancelled? = @cancelled
@@ -152,6 +153,8 @@ module RateCard
           break unless @field.nil?
         end
         nil
+      rescue RateCard::Providers::EHub::Client::RequestFailed, UnsupportedCarrier => e
+        fail_with(e).last
       end
 
       # Steps back to the nearest earlier stage that actually asked something,
@@ -206,6 +209,8 @@ module RateCard
           break unless @field.nil?
         end
         nil
+      rescue RateCard::Providers::EHub::Client::RequestFailed, UnsupportedCarrier => e
+        fail_with(e).last
       end
 
       def advance_to_confirm
