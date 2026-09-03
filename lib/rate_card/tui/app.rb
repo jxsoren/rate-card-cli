@@ -25,7 +25,7 @@ module RateCard
       # No :token stage — see TokenPrompt for why it cannot live in the loop.
       STAGES = %i[
         loading rate_mode carrier rural rural_surcharges services zones unit weights
-        package_type rate_keys confirm fetching
+        package_type rate_keys confirm add_another fetching
       ].freeze
 
       # #spec/#grid hold the most recently finished pass, for every caller that
@@ -58,6 +58,7 @@ module RateCard
         @failure_sparkline.style = Lipgloss::Style.new.foreground(Theme::WARNING)
         @log = []
         @results = []
+        @queued_specs = []
       end
 
       def cancelled? = @cancelled
@@ -114,6 +115,7 @@ module RateCard
         value = @field.value
         # The recap's own Back row, which is the esc key by another name.
         return retreat if @stage == :confirm && value == :back
+        return add_another_chosen(value) if @stage == :add_another
 
         record(@stage, value)
         advance
@@ -155,6 +157,8 @@ module RateCard
       # revisited seeds the field, and every answer after it is forgotten —
       # they were given against a choice that may be about to change.
       def retreat
+        return add_another_back if @stage == :add_another
+
         index = STAGES.index(@stage)
         loop do
           index -= 1
@@ -169,6 +173,48 @@ module RateCard
           @field = field
           return nil
         end
+      end
+
+      # Esc from add_another must not forget the just-confirmed scenario's
+      # answers the way an ordinary retreat would - they are only cleared once
+      # Yes/No is actually chosen (#confirm_or_queue).
+      def add_another_back
+        @stage = :confirm
+        @field = field_for(:confirm)
+        nil
+      end
+
+      # Yes clears @answers and jumps back to the wizard's first real
+      # question, exactly as if a brand-new session had just finished
+      # loading. No starts the fetch over the full queue.
+      def add_another_chosen(value)
+        confirm_or_queue
+        if value == :no
+          @stage = :fetching
+          return start_fetch
+        end
+
+        @stage = STAGES.first
+        loop do
+          @stage = STAGES[STAGES.index(@stage) + 1]
+          @field = field_for(@stage)
+          break unless @field.nil?
+        end
+        nil
+      end
+
+      # Commits the just-confirmed scenario's specs (today's build_specs,
+      # unchanged) to the queue and clears @answers so the next pass through
+      # the wizard, or #start_fetch, starts from a blank slate.
+      def confirm_or_queue
+        specs = build_specs
+        @queued_specs.concat(specs)
+        @log << { stage: :add_another, line: queued_summary_line(specs) }
+        @answers = {}
+      end
+
+      def queued_summary_line(specs)
+        "  #{Theme.ok(Theme::TICK)} queued: #{Theme.bold(specs.first.carrier)} — #{specs.sum(&:call_count)} calls"
       end
 
       def forget_from(stage)
@@ -190,6 +236,7 @@ module RateCard
         when :package_type then package_type_field
         when :rate_keys    then rate_keys_field
         when :confirm      then confirm_field
+        when :add_another  then add_another_field
         end
       end
 
@@ -201,6 +248,18 @@ module RateCard
       def confirm_field
         Fields::Select.new(label: 'Run this rate card?',
                            choices: [['Run', :run], ['Back', :back]], selected: 1)
+      end
+
+      # Reached after a scenario is confirmed. Yes clears @answers and jumps
+      # back to the top of the wizard for a fresh scenario; No starts the
+      # fetch over the queue built so far.
+      def add_another_field
+        Fields::Select.new(
+          label: 'Add another scenario?',
+          choices: [['Yes, add another', :yes],
+                    ["No, run #{@queued_specs.length + 1} queued scenario(s)", :no]],
+          selected: 0
+        )
       end
 
       # Only asked when the token has at least one USPS service — cubic
@@ -425,7 +484,7 @@ module RateCard
       # grid:} in #results before the next pass starts. Every other carrier
       # and mode has exactly one pass, same as before this existed.
       def start_fetch
-        @pending_specs = build_specs
+        @pending_specs = @queued_specs.dup
         # Before the first call, so a bad path is not discovered after 128 of them.
         begin
           @pending_specs.each { |spec| CsvWriter.ensure_writable!(spec.output_base) }

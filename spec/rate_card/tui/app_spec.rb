@@ -87,16 +87,19 @@ RSpec.describe RateCard::TUI::App do
     model
   end
 
-  # The recap opens on Back, so starting the run is up-then-enter.
+  # The recap opens on Back, so starting the run is up-then-enter, then
+  # No-and-enter at the add_another screen that follows.
   def start_run(model)
     press(model, Keys.up, Keys.enter)
+    press(model, Keys.down, Keys.enter)
   end
 
   # Reaches :fetching without letting the fetch's Proc command run — used when a
   # test wants to inject its own ProgressAdvanced messages instead of letting a
   # FakeClient-backed fetch complete synchronously and race past :fetching.
   def enter_fetching_stage_without_fetching(model)
-    press(model, Keys.up)
+    press(model, Keys.up, Keys.enter) # confirm -> add_another
+    press(model, Keys.down)           # select No
     model.update(Keys.enter)
   end
 
@@ -656,6 +659,128 @@ RSpec.describe RateCard::TUI::App do
       # That render still hits :fetching's view and must not crash on a
       # cleared @spec.
       expect { model.view }.not_to raise_error
+    end
+  end
+
+  describe 'multiple scenarios' do
+    it 'asks to add another scenario after confirm, instead of going straight to fetching' do
+      model = answer_happy_path(start)
+      press(model, Keys.up, Keys.enter) # confirm -> would have run; now asks add_another
+
+      expect(model.view).to include('Add another scenario?')
+    end
+
+    it 'clears the answers and returns to the first question when Yes is chosen' do
+      model = answer_happy_path(start)
+      press(model, Keys.up, Keys.enter) # confirm -> add_another
+      press(model, Keys.enter)          # Yes, add another (default selection)
+
+      expect(model.view).to include('Rate by')
+      expect(model.instance_variable_get(:@answers)).to eq({})
+    end
+
+    it 'queues the just-confirmed scenario when Yes is chosen' do
+      model = answer_happy_path(start)
+      press(model, Keys.up, Keys.enter)
+      press(model, Keys.enter) # Yes
+
+      queued = model.instance_variable_get(:@queued_specs)
+      expect(queued.length).to eq(1)
+      expect(queued.first).to be_a(RateCard::RunSpec)
+    end
+
+    it 'advances straight to fetching when No is chosen' do
+      client = FakeClient.new(services: catalog_body) do |weight, _postal|
+        { 'service_rates' => [{ 'service_id' => 1172, 'rate' => weight * 1.0 }] }
+      end
+      model = start(client: client)
+      answer_happy_path(model)
+      press(model, Keys.up, Keys.enter)  # confirm -> add_another
+      press(model, Keys.down, Keys.enter) # No, run 1 queued scenario(s)
+
+      expect(model.results.length).to eq(1)
+      expect(model).not_to be_cancelled
+    end
+
+    it 'defaults every field to a fresh session default for the second scenario' do
+      model = answer_happy_path(start)
+      press(model, Keys.up, Keys.enter) # confirm -> add_another
+      press(model, Keys.enter)          # Yes
+
+      press(model, Keys.enter)            # rate by: weight
+      press(model, Keys.down, Keys.enter) # carrier: fedex, not carried over from usps
+      expect(model.view).to include('FedEx Ground')
+    end
+
+    it "returns to the just-confirmed scenario's confirm screen with answers intact on Esc" do
+      model = answer_happy_path(start)
+      press(model, Keys.up, Keys.enter) # confirm -> add_another
+      press(model, Keys.esc)
+
+      expect(model.view).to include('Run this rate card?')
+      expect(model.view).to include('128 rate calls')
+    end
+
+    it "keeps the prior scenario's transcript visible and adds a queued summary line" do
+      model = answer_happy_path(start)
+      press(model, Keys.up, Keys.enter) # confirm -> add_another
+      press(model, Keys.enter)          # Yes
+
+      view = model.view
+      expect(view).to include('services: USPS Ground Advantage') # prior scenario's transcript stays
+      expect(view).to include('queued: USPS')
+      expect(view).to include('128 calls')
+    end
+
+    it 'shows one summary line per already-queued scenario on the add_another screen' do
+      model = answer_happy_path(start)
+      press(model, Keys.up, Keys.enter)
+      press(model, Keys.enter) # Yes, scenario 1 queued
+
+      model = answer_happy_path(model)
+      press(model, Keys.up, Keys.enter) # confirm -> add_another for scenario 2
+
+      view = model.view
+      expect(view.scan('queued:').length).to eq(1)
+      expect(view).to include('Add another scenario?')
+    end
+
+    it 'queues two scenarios with different rate_mode and produces two correctly-typed RunSpecs' do
+      model = answer_happy_path(start) # scenario 1: weight mode
+      press(model, Keys.up, Keys.enter) # confirm -> add_another
+      press(model, Keys.enter)          # Yes
+
+      press(model, Keys.down, Keys.enter)  # rate by: cubic dimensions
+      press(model, Keys.enter)             # rural: normal (USPS only, cubic restricts to USPS)
+      press(model, Keys.space, Keys.enter) # services
+      press(model, Keys.enter)             # zones
+      press(model, Keys.enter)             # cubic tiers: all pre-ticked
+      press(model, Keys.enter)             # package type
+      press(model, Keys.enter)             # rate keys
+      press(model, Keys.up, Keys.enter)    # confirm -> add_another
+      press(model, Keys.down, Keys.enter)  # No, run 2 queued scenario(s)
+
+      queued = model.results.map { |r| r[:spec] }
+      expect(queued.length).to eq(2)
+      expect(queued[0].rate_mode).to eq(:weight)
+      expect(queued[1].rate_mode).to eq(:cubic)
+    end
+
+    it 'runs exactly @queued_specs.length passes and results end up in queued order' do
+      client = FakeClient.new(services: catalog_body) do |weight, _postal|
+        { 'service_rates' => [{ 'service_id' => 1172, 'rate' => weight * 1.0 }] }
+      end
+      model = start(client: client)
+      answer_happy_path(model)
+      press(model, Keys.up, Keys.enter)
+      press(model, Keys.enter) # Yes, scenario 1 queued
+
+      answer_happy_path(model)
+      press(model, Keys.up, Keys.enter)
+      press(model, Keys.down, Keys.enter) # No, run 2 queued scenario(s)
+
+      expect(model.results.length).to eq(2)
+      expect(model.results).to all(satisfy { |r| r[:grid].any_rates? })
     end
   end
 end
