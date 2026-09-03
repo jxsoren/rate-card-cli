@@ -298,7 +298,7 @@ module RateCard
       def rate_mode_field
         return nil unless @services.any? { |service| service.carrier == 'USPS' }
 
-        choices = [['Weight', :weight], ['Cubic dimensions', :cubic]]
+        choices = [['Weight', :weight], ['Cubic', :cubic]]
         Fields::Select.new(label: 'Rate by', choices: choices,
                            selected: choices.index { |_, mode| mode == @answers[:rate_mode] } || 0)
       end
@@ -342,7 +342,7 @@ module RateCard
       def rural_field
         return nil unless Constants::Carriers.rural_aware?(carrier)
 
-        choices = [['Normal', false], ['Rural (DAS)', true]]
+        choices = [['Standard', false], ['Rural (DAS)', true]]
         Fields::Select.new(label: 'Address Type', choices: choices,
                            selected: choices.index { |_, v| v == @answers[:rural] } || 0)
       end
