@@ -24,8 +24,8 @@ module RateCard
 
       # No :token stage — see TokenPrompt for why it cannot live in the loop.
       STAGES = %i[
-        loading rate_mode carrier rural rural_surcharges services gls_origin zones unit weights
-        package_type rate_keys confirm add_another fetching
+        loading rate_mode carrier rural rural_surcharges services country gls_origin zones unit weights
+        package_type rate_keys add_another confirm fetching
       ].freeze
 
       # #spec/#grid hold the most recently finished pass, for every caller that
@@ -59,6 +59,7 @@ module RateCard
         @log = []
         @results = []
         @queued_specs = []
+        @queued_scenarios = []
         @scenario = 1
       end
 
@@ -158,7 +159,7 @@ module RateCard
       # revisited seeds the field, and every answer after it is forgotten —
       # they were given against a choice that may be about to change.
       def retreat
-        return add_another_back if @stage == :add_another
+        return confirm_back if @stage == :confirm
 
         index = STAGES.index(@stage)
         loop do
@@ -176,24 +177,24 @@ module RateCard
         end
       end
 
-      # Esc from add_another must not forget the just-confirmed scenario's
-      # answers the way an ordinary retreat would - they are only cleared once
-      # Yes/No is actually chosen (#confirm_or_queue).
-      def add_another_back
-        @stage = :confirm
-        @field = field_for(:confirm)
+      # Esc from confirm must not re-run the wizard's forget-forward logic -
+      # the scenario just chosen at add_another is already queued and its
+      # answers already cleared (#confirm_or_queue), so there is nothing left
+      # to forget. It simply reopens the add_another question.
+      def confirm_back
+        @stage = :add_another
+        @field = field_for(:add_another)
         nil
       end
 
-      # Yes clears @answers and jumps back to the wizard's first real
-      # question, exactly as if a brand-new session had just finished
-      # loading. No starts the fetch over the full queue.
+      # add_another is now asked as soon as every field is filled in, before
+      # the run is ever confirmed. Either choice queues the just-answered
+      # scenario. Yes clears @answers and jumps back to the wizard's first
+      # real question for a fresh scenario; No moves on to the confirm
+      # screen, which then asks to run the whole queue.
       def add_another_chosen(value)
         confirm_or_queue
-        if value == :no
-          @stage = :fetching
-          return start_fetch
-        end
+        return advance_to_confirm if value == :no
 
         @scenario += 1
         @log << { stage: :scenario_header, line: scenario_header_line(@scenario) }
@@ -207,16 +208,26 @@ module RateCard
         nil
       end
 
+      def advance_to_confirm
+        @stage = :confirm
+        @field = field_for(:confirm)
+        nil
+      end
+
       def scenario_header_line(number)
         "\n#{Theme.title("Scenario #{number}")}"
       end
 
       # Commits the just-confirmed scenario's specs (today's build_specs,
       # unchanged) to the queue and clears @answers so the next pass through
-      # the wizard, or #start_fetch, starts from a blank slate.
+      # the wizard, or #start_fetch, starts from a blank slate. Also grouped
+      # under @queued_scenarios, one entry per wizard pass, so the confirm
+      # recap can show each scenario as its own block rather than one flat
+      # list of specs.
       def confirm_or_queue
         specs = build_specs
         @queued_specs.concat(specs)
+        @queued_scenarios << specs
         @log << { stage: :add_another, line: queued_summary_line(specs) }
         @answers = {}
       end
@@ -238,37 +249,41 @@ module RateCard
         when :rural            then rural_field
         when :rural_surcharges then rural_surcharges_field
         when :services         then services_field
+        when :country          then country_field
         when :gls_origin       then gls_origin_field
         when :zones        then zones_field
         when :unit         then unit_field
         when :weights      then weights_field
         when :package_type then package_type_field
         when :rate_keys    then rate_keys_field
-        when :confirm      then confirm_field
         when :add_another  then add_another_field
+        when :confirm      then confirm_field
         end
       end
 
       # --------------------------------------------------------------- fields
 
-      # The last gate before production is touched. It opens on Back, not on
-      # Run: the field before it is also confirmed with enter, so a held-down
-      # return key must not be able to start 128 production calls by itself.
-      def confirm_field
-        Fields::Select.new(label: 'Run this rate card?',
-                           choices: [['Run', :run], ['Back', :back]], selected: 1)
-      end
-
-      # Reached after a scenario is confirmed. Yes clears @answers and jumps
-      # back to the top of the wizard for a fresh scenario; No starts the
-      # fetch over the queue built so far.
+      # Reached as soon as every field for the current scenario is filled in.
+      # Yes clears @answers and jumps back to the top of the wizard for a
+      # fresh scenario; No moves on to the confirm screen for the whole queue.
       def add_another_field
         Fields::Select.new(
           label: 'Add another scenario?',
           choices: [['Yes, add another', :yes],
-                    ["No, run #{@queued_specs.length + 1} queued scenario(s)", :no]],
+                    ["No, continue to run #{@queued_specs.length + 1} scenario(s)", :no]],
           selected: 0
         )
+      end
+
+      # The last gate before production is touched. It opens on Back, not on
+      # Run: the field before it is also confirmed with enter, so a held-down
+      # return key must not be able to start 128 production calls by itself.
+      # The label names the whole queue once there is more than one scenario
+      # in it, so "Run" is never ambiguous about how many cards it fires off.
+      def confirm_field
+        label = @queued_scenarios.length > 1 ? "Run all #{@queued_scenarios.length} scenarios?" : 'Run this rate card?'
+        Fields::Select.new(label: label,
+                           choices: [['Run', :run], ['Back', :back]], selected: 1)
       end
 
       # Only asked when the token has at least one USPS service — cubic
@@ -344,6 +359,19 @@ module RateCard
         )
       end
 
+      # Only offered for international-aware carriers (USPS today, via
+      # USPS_CANADA_ORIGINS/USPS_CANADA_DESTINATION), and dropped whenever
+      # rural mode is on - USPS rural DAS is its own fixed domestic chart,
+      # not something international mode should combine with.
+      def country_field
+        return nil unless Constants::Carriers.international_aware?(carrier)
+        return nil if @answers[:rural]
+
+        choices = [['Domestic', nil], ['Canada', 'CA']]
+        Fields::Select.new(label: 'Destination', choices: choices,
+                           selected: choices.index { |_, v| v == @answers[:country] } || 0)
+      end
+
       def zones_field
         return nil if ups_rural?
 
@@ -392,6 +420,7 @@ module RateCard
       end
 
       def live_zones_for(carrier)
+        return Constants::Addresses::USPS_CANADA_ORIGINS.keys.sort if carrier == 'USPS' && @answers[:country] == 'CA'
         return Constants::Addresses.available_zones(carrier) unless Constants::Carriers.live_chart?(carrier)
 
         live_chart(carrier).keys.sort
@@ -651,6 +680,7 @@ module RateCard
           cubic_tiers: cubic ? @answers[:weights] : [],
           rate_mode: @answers[:rate_mode] || :weight,
           rural: @answers[:rural],
+          country: @answers[:country],
           package_type: @answers[:package_type],
           rate_keys: @answers[:rate_keys],
           zone_chart: Constants::Carriers.live_chart?(carrier) ? live_chart(carrier) : nil,
@@ -675,36 +705,43 @@ module RateCard
         end
       end
 
-      # Everything the run will do, gathered in one block. The answers are also
-      # in the transcript above, but they arrived one at a time over eight
-      # screens; this is the only place they can be read against each other.
-      #
-      # Built from real RunSpecs (build_specs) rather than raw @answers, so a
-      # UPS rural run with both surcharge types checked recaps as the two
-      # separate cards it will actually produce, one line each.
+      # Everything every queued scenario will do, gathered in one block. By
+      # the time confirm is reached, add_another has already queued the
+      # current scenario and cleared @answers (#confirm_or_queue), so this
+      # reads from @queued_scenarios/@queued_specs rather than @answers -
+      # unlike the single-scenario recap this replaces, it has to summarize
+      # everything already queued, not just what was just answered.
       def recap_view
-        specs = build_specs
-        carrier_line = "  #{Theme.bold(carrier)}#{rural_recap} · #{@answers[:services].map(&:name).join(', ')}"
+        blocks = @queued_scenarios.map { |specs| scenario_recap_block(specs) }
+        blocks << "  #{Theme.bold(@queued_specs.sum(&:call_count).to_s)} rate calls against #{Theme.danger('production')}" \
+          "#{@queued_specs.length > 1 ? " (#{@queued_specs.length} separate cards)" : ''}"
+        blocks.join("\n\n")
+      end
+
+      # One block per queued wizard pass. Almost always one spec; more than
+      # one only for UPS rural mode with several surcharge types checked, in
+      # which case every spec in the block shares carrier/services/package/
+      # rate_keys and differs only in zones (see #build_specs).
+      def scenario_recap_block(specs)
+        first = specs.first
         [
-          carrier_line,
-          *specs.map { |spec| "  zones #{spec.zone_summary} · #{rows_recap} · #{@answers[:package_type]}" },
-          "  columns: #{@answers[:rate_keys].map { |k| RunSpec::RATE_KEY_LABELS.fetch(k) }.join(', ')}",
-          "  #{Theme.bold(specs.sum(&:call_count).to_s)} rate calls against #{Theme.danger('production')}" \
-            "#{specs.length > 1 ? " (#{specs.length} separate cards)" : ''}"
+          "  #{Theme.bold(first.carrier)}#{spec_rural_recap(first)} · #{first.services.map(&:name).join(', ')}",
+          *specs.map { |spec| "  zones #{spec.zone_summary} · #{spec_rows_recap(spec)} · #{first.package_type}" },
+          "  columns: #{first.rate_keys.map { |k| RunSpec::RATE_KEY_LABELS.fetch(k) }.join(', ')}"
         ].join("\n")
       end
 
-      def rural_recap
-        return '' unless @answers[:rural]
+      def spec_rural_recap(spec)
+        return '' unless spec.rural
 
-        " (#{rural_label(@answers[:rural])})"
+        " (#{rural_label(spec.rural)})"
       end
 
-      def rows_recap
-        if @answers[:rate_mode] == :cubic
-          "cubic tiers #{RunSpec.compact_range(@answers[:weights])}"
+      def spec_rows_recap(spec)
+        if spec.rate_mode == :cubic
+          "cubic tiers #{RunSpec.compact_range(spec.cubic_tiers)}"
         else
-          "weights #{RunSpec.compact_range(@answers[:weights])} #{@answers[:unit]}"
+          "weights #{RunSpec.compact_range(spec.weights)} #{spec.weight_unit}"
         end
       end
 
@@ -733,7 +770,7 @@ module RateCard
       def answered_line(stage, value)
         label = { rate_mode: 'rate by', carrier: 'carrier', rural: 'rural / DAS',
                   rural_surcharges: 'surcharge types', services: 'services',
-                  gls_origin: 'GLS origin', zones: 'zones',
+                  country: 'destination', gls_origin: 'GLS origin', zones: 'zones',
                   unit: 'unit', weights: 'weights', package_type: 'package',
                   rate_keys: 'columns' }[stage]
         label = 'cubic tiers' if stage == :weights && @answers[:rate_mode] == :cubic
@@ -749,6 +786,7 @@ module RateCard
         when :weights           then RunSpec.compact_range(value)
         when :rural             then rural_label(value)
         when :rural_surcharges  then value.map { |v| v.to_s.upcase }.join(', ')
+        when :country           then value || 'Domestic'
         when :rate_keys         then value.map { |k| RunSpec::RATE_KEY_LABELS.fetch(k) }.join(', ')
         else value.to_s
         end

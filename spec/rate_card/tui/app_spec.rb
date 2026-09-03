@@ -69,6 +69,7 @@ RSpec.describe RateCard::TUI::App do
     press(model, Keys.enter)                     # carrier: usps
     press(model, Keys.enter)                     # rural: normal
     press(model, Keys.space, Keys.enter)         # services: first
+    press(model, Keys.enter)                     # destination: domestic
     press(model, Keys.enter)                     # zones: default 1-8
     press(model, Keys.enter)                     # unit: oz
     press(model, Keys.enter)                     # weights: default 1-16
@@ -87,19 +88,20 @@ RSpec.describe RateCard::TUI::App do
     model
   end
 
-  # The recap opens on Back, so starting the run is up-then-enter, then
-  # No-and-enter at the add_another screen that follows.
+  # add_another is reached automatically as soon as the last field is
+  # answered. No-and-enter queues the scenario and reaches confirm; the
+  # recap there opens on Back, so starting the run is then up-then-enter.
   def start_run(model)
-    press(model, Keys.up, Keys.enter)
-    press(model, Keys.down, Keys.enter)
+    press(model, Keys.down, Keys.enter) # add_another -> confirm (No)
+    press(model, Keys.up, Keys.enter)   # confirm -> run
   end
 
   # Reaches :fetching without letting the fetch's Proc command run — used when a
   # test wants to inject its own ProgressAdvanced messages instead of letting a
   # FakeClient-backed fetch complete synchronously and race past :fetching.
   def enter_fetching_stage_without_fetching(model)
-    press(model, Keys.up, Keys.enter) # confirm -> add_another
-    press(model, Keys.down)           # select No
+    press(model, Keys.down, Keys.enter) # add_another -> confirm (No)
+    press(model, Keys.up)               # select Run
     model.update(Keys.enter)
   end
 
@@ -178,7 +180,9 @@ RSpec.describe RateCard::TUI::App do
 
   describe 'the recap' do
     it 'repeats every answer back before the confirm' do
-      view = answer_happy_path(start).view
+      model = answer_happy_path(start)
+      press(model, Keys.down, Keys.enter) # add_another: No -> confirm
+      view = model.view
 
       expect(view).to include('USPS')
       expect(view).to include('USPS Ground Advantage')
@@ -194,9 +198,10 @@ RSpec.describe RateCard::TUI::App do
   describe 'the Run/Back choice' do
     it 'opens on Back, so a stray enter goes back instead of starting a run' do
       model = answer_happy_path(start)
+      press(model, Keys.down, Keys.enter) # add_another: No -> confirm
       press(model, Keys.enter)
 
-      expect(model.view).to include('Rate columns')
+      expect(model.view).to include('Add another scenario?')
       expect(model.spec).to be_nil
     end
   end
@@ -213,7 +218,7 @@ RSpec.describe RateCard::TUI::App do
 
     it 'walks all the way back to the first question' do
       model = answer_happy_path(start)
-      9.times { press(model, Keys.esc) }
+      10.times { press(model, Keys.esc) }
 
       expect(model.view).to include('Rate by')
     end
@@ -254,7 +259,7 @@ RSpec.describe RateCard::TUI::App do
     # they are not carried forward as ticks into a list they are not in.
     it 'forgets the services when the carrier changes' do
       model = answer_happy_path(start)
-      6.times { press(model, Keys.esc) } # back to services
+      7.times { press(model, Keys.esc) } # back to services
       press(model, Keys.esc)             # back to rural
       press(model, Keys.esc)             # back to carrier
       press(model, Keys.down, Keys.enter) # carrier: fedex
@@ -287,6 +292,7 @@ RSpec.describe RateCard::TUI::App do
       press(model, Keys.enter) # carrier
       press(model, Keys.enter) # rural: normal
       press(model, Keys.space, Keys.enter) # services
+      press(model, Keys.enter) # destination: domestic
       press(model, Keys.type('99'), Keys.enter)
 
       expect(model.view).to include('no valid zones')
@@ -301,6 +307,7 @@ RSpec.describe RateCard::TUI::App do
       press(model, Keys.enter) # carrier
       press(model, Keys.enter) # rural: normal
       press(model, Keys.space, Keys.enter) # services
+      press(model, Keys.enter) # destination: domestic
       press(model, Keys.enter) # zones
       press(model, Keys.enter) # unit
       press(model, Keys.type('abc'), Keys.enter)
@@ -448,6 +455,7 @@ RSpec.describe RateCard::TUI::App do
       press(model, Keys.enter)             # rate by: weight (single USPS service present)
       press(model, Keys.enter)             # rural: normal (single carrier, so no carrier step)
       press(model, Keys.space, Keys.enter) # services
+      press(model, Keys.enter)             # destination: domestic
       press(model, Keys.enter)             # zones
       press(model, Keys.enter)             # unit
 
@@ -460,6 +468,7 @@ RSpec.describe RateCard::TUI::App do
       press(model, Keys.enter)
       press(model, Keys.enter)
       press(model, Keys.space, Keys.enter)
+      press(model, Keys.enter) # destination: domestic
       press(model, Keys.enter)
       press(model, Keys.enter)
       press(model, Keys.enter)
@@ -473,6 +482,7 @@ RSpec.describe RateCard::TUI::App do
       press(model, Keys.down, Keys.enter)  # rate by: cubic dimensions
       press(model, Keys.enter)             # rural: normal (USPS, only carrier left)
       press(model, Keys.space, Keys.enter) # services: first
+      press(model, Keys.enter)             # destination: domestic
       press(model, Keys.enter)             # zones
       press(model, Keys.enter)             # cubic tiers: all pre-ticked
       press(model, Keys.enter)             # package type
@@ -493,6 +503,7 @@ RSpec.describe RateCard::TUI::App do
       press(model, Keys.down, Keys.enter)  # rate by: cubic dimensions
       press(model, Keys.enter)             # rural: normal
       press(model, Keys.space, Keys.enter) # services
+      press(model, Keys.enter)             # destination: domestic
       press(model, Keys.enter)             # zones
 
       expect(model.view).to include('Tier 1')
@@ -512,6 +523,7 @@ RSpec.describe RateCard::TUI::App do
       press(model, Keys.down, Keys.enter)  # rate by: cubic dimensions
       press(model, Keys.enter)             # rural: normal
       press(model, Keys.space, Keys.enter) # services
+      press(model, Keys.enter)             # destination: domestic
       press(model, Keys.enter)             # zones
       press(model, Keys.enter)             # cubic tiers: all pre-ticked
 
@@ -627,6 +639,7 @@ RSpec.describe RateCard::TUI::App do
       press(model, Keys.enter)             # weights
       press(model, Keys.enter)             # package type
       press(model, Keys.enter)             # rate keys
+      press(model, Keys.down, Keys.enter)  # add_another: No -> confirm
 
       view = model.view
       expect(view).to include('zones edas')
@@ -663,17 +676,15 @@ RSpec.describe RateCard::TUI::App do
   end
 
   describe 'multiple scenarios' do
-    it 'asks to add another scenario after confirm, instead of going straight to fetching' do
+    it 'asks to add another scenario as soon as the last field is answered, before any run confirm' do
       model = answer_happy_path(start)
-      press(model, Keys.up, Keys.enter) # confirm -> would have run; now asks add_another
 
       expect(model.view).to include('Add another scenario?')
     end
 
     it 'clears the answers and returns to the first question when Yes is chosen' do
       model = answer_happy_path(start)
-      press(model, Keys.up, Keys.enter) # confirm -> add_another
-      press(model, Keys.enter)          # Yes, add another (default selection)
+      press(model, Keys.enter) # Yes, add another (default selection)
 
       expect(model.view).to include('Rate by')
       expect(model.instance_variable_get(:@answers)).to eq({})
@@ -681,7 +692,6 @@ RSpec.describe RateCard::TUI::App do
 
     it 'queues the just-confirmed scenario when Yes is chosen' do
       model = answer_happy_path(start)
-      press(model, Keys.up, Keys.enter)
       press(model, Keys.enter) # Yes
 
       queued = model.instance_variable_get(:@queued_specs)
@@ -689,42 +699,43 @@ RSpec.describe RateCard::TUI::App do
       expect(queued.first).to be_a(RateCard::RunSpec)
     end
 
-    it 'advances straight to fetching when No is chosen' do
+    it 'reaches the run confirm (not the fetch) when No is chosen, naming the whole queue once fetched' do
       client = FakeClient.new(services: catalog_body) do |weight, _postal|
         { 'service_rates' => [{ 'service_id' => 1172, 'rate' => weight * 1.0 }] }
       end
       model = start(client: client)
       answer_happy_path(model)
-      press(model, Keys.up, Keys.enter)  # confirm -> add_another
-      press(model, Keys.down, Keys.enter) # No, run 1 queued scenario(s)
+      press(model, Keys.down, Keys.enter) # No, continue to run 1 scenario(s)
 
+      expect(model.view).to include('Run this rate card?')
+      expect(model.results).to be_empty
+
+      press(model, Keys.up, Keys.enter) # confirm -> run
       expect(model.results.length).to eq(1)
       expect(model).not_to be_cancelled
     end
 
     it 'defaults every field to a fresh session default for the second scenario' do
       model = answer_happy_path(start)
-      press(model, Keys.up, Keys.enter) # confirm -> add_another
-      press(model, Keys.enter)          # Yes
+      press(model, Keys.enter) # Yes
 
       press(model, Keys.enter)            # rate by: weight
       press(model, Keys.down, Keys.enter) # carrier: fedex, not carried over from usps
       expect(model.view).to include('FedEx Ground')
     end
 
-    it "returns to the just-confirmed scenario's confirm screen with answers intact on Esc" do
+    it "returns to add_another with the queued scenario intact on Esc from confirm" do
       model = answer_happy_path(start)
-      press(model, Keys.up, Keys.enter) # confirm -> add_another
-      press(model, Keys.esc)
+      press(model, Keys.down, Keys.enter) # No -> confirm
+      press(model, Keys.esc)              # confirm -> add_another
 
-      expect(model.view).to include('Run this rate card?')
-      expect(model.view).to include('128 rate calls')
+      expect(model.view).to include('Add another scenario?')
+      expect(model.instance_variable_get(:@queued_specs).length).to eq(1)
     end
 
     it "keeps the prior scenario's transcript visible and adds a queued summary line" do
       model = answer_happy_path(start)
-      press(model, Keys.up, Keys.enter) # confirm -> add_another
-      press(model, Keys.enter)          # Yes
+      press(model, Keys.enter) # Yes
 
       view = model.view
       expect(view).to include('services: USPS Ground Advantage') # prior scenario's transcript stays
@@ -734,31 +745,39 @@ RSpec.describe RateCard::TUI::App do
 
     it 'shows one summary line per already-queued scenario on the add_another screen' do
       model = answer_happy_path(start)
-      press(model, Keys.up, Keys.enter)
       press(model, Keys.enter) # Yes, scenario 1 queued
 
-      model = answer_happy_path(model)
-      press(model, Keys.up, Keys.enter) # confirm -> add_another for scenario 2
+      model = answer_happy_path(model) # scenario 2's fields, lands back on add_another
 
       view = model.view
       expect(view.scan('queued:').length).to eq(1)
       expect(view).to include('Add another scenario?')
     end
 
+    it 'names the confirm screen for the whole queue once more than one scenario is queued' do
+      model = answer_happy_path(start)
+      press(model, Keys.enter) # Yes, scenario 1 queued
+
+      answer_happy_path(model)
+      press(model, Keys.down, Keys.enter) # No -> confirm
+
+      expect(model.view).to include('Run all 2 scenarios?')
+    end
+
     it 'queues two scenarios with different rate_mode and produces two correctly-typed RunSpecs' do
       model = answer_happy_path(start) # scenario 1: weight mode
-      press(model, Keys.up, Keys.enter) # confirm -> add_another
       press(model, Keys.enter)          # Yes
 
       press(model, Keys.down, Keys.enter)  # rate by: cubic dimensions
       press(model, Keys.enter)             # rural: normal (USPS only, cubic restricts to USPS)
       press(model, Keys.space, Keys.enter) # services
+      press(model, Keys.enter)             # destination: domestic
       press(model, Keys.enter)             # zones
       press(model, Keys.enter)             # cubic tiers: all pre-ticked
       press(model, Keys.enter)             # package type
       press(model, Keys.enter)             # rate keys
-      press(model, Keys.up, Keys.enter)    # confirm -> add_another
-      press(model, Keys.down, Keys.enter)  # No, run 2 queued scenario(s)
+      press(model, Keys.down, Keys.enter)  # No -> confirm
+      press(model, Keys.up, Keys.enter)    # confirm -> run
 
       queued = model.results.map { |r| r[:spec] }
       expect(queued.length).to eq(2)
@@ -772,12 +791,11 @@ RSpec.describe RateCard::TUI::App do
       end
       model = start(client: client)
       answer_happy_path(model)
-      press(model, Keys.up, Keys.enter)
       press(model, Keys.enter) # Yes, scenario 1 queued
 
       answer_happy_path(model)
-      press(model, Keys.up, Keys.enter)
-      press(model, Keys.down, Keys.enter) # No, run 2 queued scenario(s)
+      press(model, Keys.down, Keys.enter) # No -> confirm
+      press(model, Keys.up, Keys.enter)   # confirm -> run
 
       expect(model.results.length).to eq(2)
       expect(model.results).to all(satisfy { |r| r[:grid].any_rates? })
