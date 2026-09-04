@@ -98,7 +98,7 @@ RSpec.describe RateCard::TUI::Fields::MultiSelect do
   it 'shows a running count of what is ticked' do
     field = build(checked: [0])
 
-    expect(field.view).to include('1/3 selected')
+    expect(field.keymap_hint).to include('1/3 selected')
   end
 
   it 'windows a long list so it cannot push the rest of the screen away' do

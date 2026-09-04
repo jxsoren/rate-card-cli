@@ -189,7 +189,9 @@ RSpec.describe RateCard::TUI::App do
       expect(view).to include('weights 1-16 oz')
       expect(view).to include('parcel')
       expect(view).to include('shipper rate, meter rate')
-      expect(view).to include('128 rate calls against production')
+      expect(view).to include('128')
+      expect(view).to include('calls')
+      expect(view).to include('production')
       expect(view).to include('Run this rate card?')
     end
   end

@@ -10,6 +10,12 @@ module RateCard
       class Select
         WINDOW = 8
 
+        HELP_BINDINGS = [
+          Bubbles::Key.binding(keys: %w[up down k j], help: ['↑↓', 'move']),
+          Bubbles::Key.binding(keys: ['enter'], help: ['enter', 'confirm']),
+          Bubbles::Key.binding(keys: ['esc'], help: ['esc', 'back'])
+        ].freeze
+
         attr_reader :label
 
         # choices: Array<[display String, value]>
@@ -25,6 +31,15 @@ module RateCard
 
         def done? = @chosen
         def value = @value
+
+        # Pulled out of #view so App can draw it in a persistent footer bar
+        # instead of repeating it under every single field.
+        def keymap_hint
+          hint = Theme.help_view(HELP_BINDINGS)
+          return hint if @choices.length <= WINDOW
+
+          "#{hint}  #{Theme.muted("#{@cursor + 1}/#{@choices.length}")}"
+        end
 
         def update(message)
           return nil unless message.is_a?(Bubbletea::KeyMessage)
@@ -50,7 +65,6 @@ module RateCard
                        "    #{display}"
                      end
           end
-          lines << "  #{Theme.muted(hint)}"
           lines.join("\n")
         end
 
@@ -67,12 +81,6 @@ module RateCard
 
           start = [[@cursor - (WINDOW / 2), 0].max, @choices.length - WINDOW].min
           (start...(start + WINDOW))
-        end
-
-        def hint
-          parts = ['↑↓ move', 'enter confirm', 'esc back']
-          parts << "#{@cursor + 1}/#{@choices.length}" if @choices.length > WINDOW
-          parts.join(' · ')
         end
       end
     end

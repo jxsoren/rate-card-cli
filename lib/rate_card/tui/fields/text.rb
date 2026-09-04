@@ -11,6 +11,11 @@ module RateCard
       # mistyped zone list or a mangled paste of a JWT costs a keystroke rather
       # than the run — the same guarantee the tty-prompt wizard made.
       class Text
+        HELP_BINDINGS = [
+          Bubbles::Key.binding(keys: ['enter'], help: ['enter', 'confirm']),
+          Bubbles::Key.binding(keys: ['esc'], help: ['esc', 'back'])
+        ].freeze
+
         attr_reader :label, :error
 
         # parse: String -> value, raising ArgumentError with a message to show.
@@ -35,6 +40,10 @@ module RateCard
         def done? = !@value.nil?
         def value = @value
 
+        # Pulled out of #view so App can draw it in a persistent footer bar
+        # instead of repeating it under every single field.
+        def keymap_hint = Theme.help_view(HELP_BINDINGS)
+
         def update(message)
           if message.is_a?(Bubbletea::KeyMessage) && message.enter?
             submit
@@ -47,7 +56,7 @@ module RateCard
 
         def view
           lines = ["#{Theme.accent(Theme::CURSOR)} #{Theme.bold(@label)} #{@input.view}"]
-          lines << "  #{Theme.muted("#{@hint} · esc back")}" if @hint
+          lines << "  #{Theme.muted(@hint)}" if @hint
           lines << "  #{Theme.danger(Theme::CROSS)} #{Theme.danger(@error)}" if @error
           lines.join("\n")
         end

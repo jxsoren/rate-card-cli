@@ -49,7 +49,7 @@ module RateCard
         @field = nil
         @cancelled = false
         @error = nil
-        @spinner = Bubbles::Spinner.new
+        @spinner = Bubbles::Spinner.new(style: Lipgloss::Style.new.foreground(Theme::ACCENT))
         @progress = Bubbles::Progress.new(width: 32)
         @completed = 0
         @failed = 0
@@ -91,8 +91,9 @@ module RateCard
         transcript = @log.filter_map { |entry| entry[:line] }
         sections = []
         sections << transcript.join("\n") unless transcript.empty?
+        sections << Theme.divider unless transcript.empty?
         sections << stage_view
-        "#{sections.compact.join("\n\n")}\n"
+        "#{Theme.panel(sections.compact.join("\n\n"))}\n#{Theme.footer(footer_text)}\n"
       end
 
       private
@@ -726,6 +727,14 @@ module RateCard
         end
       end
 
+      # Loading and fetching have no field to ask a keybinding of — the only
+      # live key on either screen is Ctrl-C — so they fall back to that.
+      QUIT_BINDING = [Bubbles::Key.binding(keys: ['ctrl+c'], help: ['ctrl+c', 'quit'])].freeze
+
+      def footer_text
+        @field&.keymap_hint || Theme.help_view(QUIT_BINDING)
+      end
+
       # Everything every queued scenario will do, gathered in one block. By
       # the time confirm is reached, add_another has already queued the
       # current scenario and cleared @answers (#confirm_or_queue), so this
@@ -733,10 +742,30 @@ module RateCard
       # unlike the single-scenario recap this replaces, it has to summarize
       # everything already queued, not just what was just answered.
       def recap_view
-        blocks = @queued_scenarios.map { |specs| scenario_recap_block(specs) }
-        blocks << "  #{Theme.bold(@queued_specs.sum(&:call_count).to_s)} rate calls against #{Theme.danger('production')}" \
-          "#{@queued_specs.length > 1 ? " (#{@queued_specs.length} separate cards)" : ''}"
-        blocks.join("\n\n")
+        scenarios = @queued_scenarios.map { |specs| scenario_recap_block(specs) }.join("\n\n")
+        Lipgloss.join_vertical(Lipgloss::LEFT, scenarios, '', summary_block)
+      end
+
+      # The production warning and call total, pulled into their own box so
+      # the one fact that actually gates the run — this is about to hit
+      # production N times — reads as a distinct decision, not another line
+      # buried under the scenario details on its left.
+      def summary_block
+        calls = @queued_specs.sum(&:call_count)
+        cards = @queued_specs.length > 1 ? "#{@queued_specs.length} separate cards" : '1 card'
+        lines = [
+          Theme.bold('Summary'),
+          '',
+          "#{Theme.bold(calls.to_s)} calls",
+          cards,
+          '',
+          Theme.danger("#{Theme::ALERT} production")
+        ]
+        Lipgloss::Style.new
+                        .border(Lipgloss::ROUNDED_BORDER)
+                        .border_foreground(Theme::DANGER)
+                        .padding(0, 2)
+                        .render(lines.join("\n"))
       end
 
       # One block per queued wizard pass. Almost always one spec; more than
@@ -769,12 +798,23 @@ module RateCard
       def fetch_view
         total = @spec.call_count
         percent = total.zero? ? 0.0 : @completed.to_f / total
+        @progress.full_color = progress_color(percent)
         title = @total_passes > 1 ? "fetching rates (pass #{@pass_index}/#{@total_passes})" : 'fetching rates'
         line = "  #{@progress.view_as(percent)}  #{@completed}/#{total}"
         line += "  #{Theme.warning("#{Theme::ALERT} #{@failed} failed")}" if @failed.positive?
         view = "#{Theme.bold("  #{title}")}\n#{line}"
         view += "\n#{failure_sparkline_view}" if @failed.positive?
         view
+      end
+
+      # Warning early, accent through the middle stretch, ok once the run is
+      # nearly done — so a glance at the bar's colour alone tells you roughly
+      # how far along it is, without reading the fraction next to it.
+      def progress_color(percent)
+        return Theme::OK if percent >= 0.75
+        return Theme::ACCENT if percent >= 0.34
+
+        Theme::WARNING
       end
 
       # Only drawn once a failure has happened: a spark line of zeroes for a

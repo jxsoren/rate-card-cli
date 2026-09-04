@@ -15,6 +15,13 @@ module RateCard
       class MultiSelect
         WINDOW = 8
 
+        HELP_BINDINGS = [
+          Bubbles::Key.binding(keys: [' '], help: %w[space toggle]),
+          Bubbles::Key.binding(keys: ['a'], help: %w[a all]),
+          Bubbles::Key.binding(keys: ['enter'], help: ['enter', 'confirm']),
+          Bubbles::Key.binding(keys: ['esc'], help: ['esc', 'back'])
+        ].freeze
+
         attr_reader :label, :error
 
         # choices: Array<[display String, value]>
@@ -29,6 +36,13 @@ module RateCard
         end
 
         def done? = @done
+
+        # Pulled out of #view so App can draw it in a persistent footer bar
+        # instead of repeating it under every single field.
+        def keymap_hint
+          counter = Theme.muted("#{@checked.length}/#{@choices.length} selected")
+          "#{Theme.help_view(HELP_BINDINGS)}  #{counter}"
+        end
 
         def value
           @choices.each_with_index
@@ -56,7 +70,6 @@ module RateCard
         def view
           lines = ["#{Theme.accent(Theme::CURSOR)} #{Theme.bold(@label)}"]
           window.each { |index| lines << choice_line(index) }
-          lines << "  #{Theme.muted(hint)}"
           lines << "  #{Theme.danger(Theme::CROSS)} #{Theme.danger(@error)}" if @error
           lines.join("\n")
         end
@@ -69,11 +82,6 @@ module RateCard
           pointer = index == @cursor ? Theme.accent(Theme::CURSOR) : ' '
           text = index == @cursor ? Theme.accent(display) : display
           "  #{pointer} #{box} #{text}"
-        end
-
-        def hint
-          counter = "#{@checked.length}/#{@choices.length} selected"
-          "space toggle · a all · enter confirm · esc back · #{counter}"
         end
 
         # The spacebar arrives as KEY_SPACE from some terminals and as a plain
